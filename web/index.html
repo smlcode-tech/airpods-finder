@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirPods Bulucu</title>
+<meta name="theme-color" content="#0b0d10">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #111418; --muted: #5d6570;
+    --line: #e2e5ea; --accent: #0a84ff; --accent-text: #ffffff;
+    --ok: #1f9d55; --warn-bg: #fff4e5; --warn-text: #8a4b00; --danger: #e5484d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10; --card: #15181d; --text: #eef0f3; --muted: #9aa3ad;
+      --line: #262b32; --accent: #0a84ff; --accent-text: #ffffff;
+      --ok: #3ccf7e; --warn-bg: #2a1e0d; --warn-text: #f5b759; --danger: #ff6369;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 18px; margin-bottom: 14px;
+  }
+  .step { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-weight: 600; }
+  .num {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--line); font-size: 14px;
+  }
+  .done .num { background: var(--ok); color: #fff; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 12px; cursor: pointer;
+    padding: 14px 16px; width: 100%;
+  }
+  .primary { background: var(--accent); color: var(--accent-text); }
+  .secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); margin-top: 8px; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .play { font-size: 20px; padding: 22px; }
+  .play.stop { background: var(--danger); }
+  .status { margin: 10px 0 0; color: var(--muted); font-size: 14px; min-height: 1.5em; }
+  .status.ok { color: var(--ok); }
+  .devices { list-style: none; padding: 0; margin: 10px 0 0; }
+  .devices li button {
+    background: transparent; color: var(--text); border: 1px solid var(--line);
+    text-align: left; margin-top: 6px; font-weight: 500;
+  }
+  .devices li button.airpods { border-color: var(--accent); }
+  .devices li button.sel { background: var(--accent); color: var(--accent-text); }
+  .row { display: flex; justify-content: space-between; align-items: baseline; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 10px 0 4px; height: 28px; }
+  .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .warn {
+    background: var(--warn-bg); color: var(--warn-text); border-radius: 12px;
+    padding: 12px 14px; font-size: 14px; margin-bottom: 14px;
+  }
+  .hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+  .hint ol { margin: 6px 0 0; padding-left: 20px; }
+  label.chk { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; margin-top: 12px; }
+  label.chk input { margin-top: 3px; width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AirPods Bulucu</h1>
+  <p class="sub">AirPods'u bağla, ses seviyesini ayarla ve tiz bir sinyal çal.</p>
+
+  <div class="warn">
+    <strong>Uyarı:</strong> AirPods kulağındayken çalma. Yüksek seste tiz ses işitmene zarar verebilir.
+  </div>
+
+  <section class="card" id="connectCard">
+    <p class="step"><span class="num">1</span>AirPods'a bağlan</p>
+    <button class="primary" id="connectBtn">Bluetooth cihazı seç</button>
+    <ul class="devices" id="deviceList"></ul>
+    <div class="hint" id="connectHint" hidden></div>
+    <p class="status" id="connectStatus"></p>
+  </section>
+
+  <section class="card">
+    <p class="step"><span class="num">2</span>Ses seviyesi</p>
+    <div class="row"><span>Şiddet</span><span class="val" id="volVal">100%</span></div>
+    <input type="range" id="vol" min="0" max="100" value="100" aria-label="Ses şiddeti">
+    <div class="row"><span>Ton (tizlik)</span><span class="val" id="pitchVal">3.5 kHz</span></div>
+    <input type="range" id="pitch" min="1000" max="8000" step="100" value="3500" aria-label="Ton yüksekliği">
+    <p class="hint">Sayfa en fazla cihazın sistem sesi kadar yüksek çalabilir. Telefonun ya da bilgisayarın ses tuşlarıyla sistem sesini de sonuna kadar aç.</p>
+  </section>
+
+  <section class="card">
+    <p class="step"><span class="num">3</span>Çal</p>
+    <button class="primary play" id="playBtn" disabled>▶ Çal</button>
+    <p class="status" id="playStatus">Önce AirPods'a bağlan.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const connectBtn = $("connectBtn"), deviceList = $("deviceList"), connectHint = $("connectHint");
+  const connectStatus = $("connectStatus"), playBtn = $("playBtn"), playStatus = $("playStatus");
+  const vol = $("vol"), volVal = $("volVal"), pitch = $("pitch"), pitchVal = $("pitchVal");
+
+  let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
+  let connected = false;
+  let ctx = null, master = null, timer = null, routeEl = null;
+
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const canSelectOutput = !!(navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput);
+  const canSetSink = "setSinkId" in HTMLMediaElement.prototype ||
+    (window.AudioContext && "setSinkId" in AudioContext.prototype);
+  const canEnumerate = !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) && canSetSink;
+
+  function markConnected(label) {
+    connected = true;
+    $("connectCard").classList.add("done");
+    connectStatus.textContent = "Bağlandı: " + label;
+    connectStatus.className = "status ok";
+    playBtn.disabled = false;
+    playStatus.textContent = "Hazır.";
+  }
+
+  function showManualHint() {
+    connectHint.hidden = false;
+    connectHint.innerHTML = isIOS
+      ? "Bu cihazda tarayıcı ses çıkışını kendisi seçemiyor. AirPods'u şöyle bağla:" +
+        "<ol><li>Kutunun kapağını aç, AirPods'u telefonun yanına getir.</li>" +
+        "<li>Denetim Merkezi'ni aç, müzik kartındaki AirPlay simgesine dokun.</li>" +
+        "<li>Listeden AirPods'u seç ve buraya geri dön.</li></ol>"
+      : "Bu tarayıcı ses çıkışını kendisi seçemiyor. AirPods'u cihazının Bluetooth ayarlarından bağla, " +
+        "ses çıkışı olarak seç ve buraya geri dön.";
+    const ok = document.createElement("button");
+    ok.className = "secondary";
+    ok.textContent = "AirPods'u bağladım";
+    ok.onclick = () => { markConnected("sistem ses çıkışı"); ok.remove(); };
+    connectHint.appendChild(ok);
+  }
+
+  async function pickWithEnumerate() {
+    // Cihaz adlarını görmek için tarayıcı mikrofon izni ister; mikrofon hemen kapatılır.
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+    } catch (e) { /* izin verilmezse adlar boş gelir */ }
+    const outs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audiooutput");
+    deviceList.innerHTML = "";
+    if (!outs.length || outs.every((d) => !d.label)) { showManualHint(); return; }
+    outs.sort((a, b) => /airpods/i.test(b.label) - /airpods/i.test(a.label));
+    for (const d of outs) {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.textContent = (d.label || "Bilinmeyen cihaz") + (/airpods/i.test(d.label) ? "  🎧" : "");
+      if (/airpods/i.test(d.label)) b.classList.add("airpods");
+      b.onclick = () => {
+        deviceList.querySelectorAll("button").forEach((x) => x.classList.remove("sel"));
+        b.classList.add("sel");
+        sinkId = d.deviceId;
+        markConnected(d.label || "seçilen cihaz");
+      };
+      li.appendChild(b);
+      deviceList.appendChild(li);
+    }
+    connectStatus.textContent = outs.some((d) => /airpods/i.test(d.label))
+      ? "AirPods'u listeden seç."
+      : "Listede AirPods yok. Önce Bluetooth ayarlarından bağla, sonra tekrar dene.";
+    connectStatus.className = "status";
+  }
+
+  connectBtn.onclick = async () => {
+    connectHint.hidden = true; connectHint.innerHTML = "";
+    try {
+      if (canSelectOutput) {
+        const d = await navigator.mediaDevices.selectAudioOutput();
+        sinkId = d.deviceId;
+        markConnected(d.label || "seçilen cihaz");
+      } else if (canEnumerate) {
+        await pickWithEnumerate();
+      } else {
+        showManualHint();
+      }
+    } catch (e) {
+      connectStatus.textContent = "Cihaz seçilmedi.";
+      connectStatus.className = "status";
+      showManualHint();
+    }
+  };
+
+  // ---- Ses ----
+  const gainFromSlider = () => Math.pow(vol.value / 100, 2); // kulağa doğrusal gelen eğri
+  vol.oninput = () => {
+    volVal.textContent = vol.value + "%";
+    if (master) master.gain.setTargetAtTime(gainFromSlider(), ctx.currentTime, 0.02);
+  };
+  pitch.oninput = () => { pitchVal.textContent = (pitch.value / 1000).toFixed(1) + " kHz"; };
+
+  async function startAudio() {
+    // iOS: sessiz anahtarı açıkken de çalsın
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain();
+    master.gain.value = gainFromSlider();
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -1; limiter.ratio.value = 20;
+    master.connect(limiter);
+
+    if (sinkId && "setSinkId" in AudioContext.prototype) {
+      await ctx.setSinkId(sinkId);
+      limiter.connect(ctx.destination);
+    } else if (sinkId && "setSinkId" in HTMLMediaElement.prototype) {
+      const dest = ctx.createMediaStreamDestination();
+      limiter.connect(dest);
+      routeEl = new Audio();
+      routeEl.srcObject = dest.stream;
+      await routeEl.setSinkId(sinkId);
+      await routeEl.play();
+    } else {
+      limiter.connect(ctx.destination);
+    }
+    await ctx.resume();
+
+    // Find My benzeri: 4 kısa yükselen cıvıltı + duraklama, döngü halinde.
+    const schedule = () => {
+      const t0 = ctx.currentTime + 0.05;
+      const base = Number(pitch.value);
+      for (let i = 0; i < 4; i++) {
+        const t = t0 + i * 0.18;
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(base * 0.75, t);
+        osc.frequency.linearRampToValueAtTime(base * 1.25, t + 0.12);
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(1, t + 0.005);
+        env.gain.setValueAtTime(1, t + 0.115);
+        env.gain.linearRampToValueAtTime(0, t + 0.12);
+        osc.connect(env).connect(master);
+        osc.start(t); osc.stop(t + 0.13);
+      }
+    };
+    schedule();
+    timer = setInterval(schedule, 1070);
+  }
+
+  function stopAudio() {
+    clearInterval(timer); timer = null;
+    if (routeEl) { routeEl.pause(); routeEl.srcObject = null; routeEl = null; }
+    if (ctx) { ctx.close(); ctx = null; master = null; }
+  }
+
+  playBtn.onclick = async () => {
+    if (!connected) return;
+    if (timer) {
+      stopAudio();
+      playBtn.textContent = "▶ Çal"; playBtn.classList.remove("stop");
+      playStatus.textContent = "Durduruldu.";
+      return;
+    }
+    try {
+      await startAudio();
+      playBtn.textContent = "■ Durdur"; playBtn.classList.add("stop");
+      playStatus.textContent = "Çalıyor… Sesin geldiği yöne doğru yürü.";
+    } catch (e) {
+      stopAudio();
+      playStatus.textContent = "Çalınamadı: " + (e && e.message ? e.message : e);
+    }
+  };
+})();
+</script>
+</body>
+</html>
