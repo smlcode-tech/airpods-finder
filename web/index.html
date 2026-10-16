@@ -70,7 +70,7 @@
 <body>
 <main>
   <h1>AirPods Bulucu</h1>
-  <p class="sub">AirPods'u bağla, ses seviyesini ayarla ve tiz bir sinyal çal.</p>
+  <p class="sub">AirPods'u bağla, ses seviyesini ayarla ve kesintisiz bip sesi çal.</p>
 
   <div class="warn">
     <strong>Uyarı:</strong> AirPods kulağındayken çalma. Yüksek seste tiz ses işitmene zarar verebilir.
@@ -86,11 +86,11 @@
 
   <section class="card">
     <p class="step"><span class="num">2</span>Ses seviyesi</p>
-    <div class="row"><span>Şiddet</span><span class="val" id="volVal">100%</span></div>
-    <input type="range" id="vol" min="0" max="100" value="100" aria-label="Ses şiddeti">
-    <div class="row"><span>Ton (tizlik)</span><span class="val" id="pitchVal">3.5 kHz</span></div>
-    <input type="range" id="pitch" min="1000" max="8000" step="100" value="3500" aria-label="Ton yüksekliği">
-    <p class="hint">Sayfa en fazla cihazın sistem sesi kadar yüksek çalabilir. Telefonun ya da bilgisayarın ses tuşlarıyla sistem sesini de sonuna kadar aç.</p>
+    <div class="row"><span>Şiddet</span><span class="val" id="volVal">200% · boost</span></div>
+    <input type="range" id="vol" min="0" max="200" value="200" aria-label="Ses şiddeti">
+    <div class="row"><span>Ton</span><span class="val" id="pitchVal">1.0 kHz</span></div>
+    <input type="range" id="pitch" min="500" max="4000" step="50" value="1000" aria-label="Ton yüksekliği">
+    <p class="hint">%100'ün üstü boost: ses kırpılarak sertleşir ve daha gür duyulur. 1 kHz klasik sansür bip sesidir; 2–3 kHz uzaktan daha iyi duyulur. Sistem sesini de ses tuşlarıyla sonuna kadar aç.</p>
   </section>
 
   <section class="card">
@@ -109,7 +109,7 @@
 
   let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
   let connected = false;
-  let ctx = null, master = null, timer = null, routeEl = null;
+  let ctx = null, osc = null, drive = null, out = null, routeEl = null, playing = false;
 
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -193,70 +193,71 @@
   };
 
   // ---- Ses ----
-  const gainFromSlider = () => Math.pow(vol.value / 100, 2); // kulağa doğrusal gelen eğri
+  // 0-100: temiz ses, seviye düşer. 100-200: boost; sinyal 8 kata kadar sürülüp
+  // kırpılır, kare dalgaya yaklaşır (aynı tepe seviyede daha yüksek enerji).
+  function levels() {
+    const v = Number(vol.value);
+    return v <= 100
+      ? { drive: 1, out: Math.pow(v / 100, 2) * 0.98 }
+      : { drive: 1 + (v - 100) / 100 * 7, out: 0.95 };
+  }
   vol.oninput = () => {
-    volVal.textContent = vol.value + "%";
-    if (master) master.gain.setTargetAtTime(gainFromSlider(), ctx.currentTime, 0.02);
+    volVal.textContent = vol.value + "%" + (vol.value > 100 ? " · boost" : "");
+    if (!ctx) return;
+    const l = levels();
+    drive.gain.setTargetAtTime(l.drive, ctx.currentTime, 0.02);
+    out.gain.setTargetAtTime(l.out, ctx.currentTime, 0.02);
   };
-  pitch.oninput = () => { pitchVal.textContent = (pitch.value / 1000).toFixed(1) + " kHz"; };
+  pitch.oninput = () => {
+    pitchVal.textContent = (pitch.value / 1000).toFixed(1) + " kHz";
+    if (osc) osc.frequency.setTargetAtTime(Number(pitch.value), ctx.currentTime, 0.02);
+  };
 
   async function startAudio() {
     // iOS: sessiz anahtarı açıkken de çalsın
     try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    master = ctx.createGain();
-    master.gain.value = gainFromSlider();
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -1; limiter.ratio.value = 20;
-    master.connect(limiter);
+    const l = levels();
+    osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = Number(pitch.value);
+    drive = ctx.createGain();
+    drive.gain.value = l.drive;
+    // Doğrusal eğri: [-1, 1] dışı değerler WaveShaper tarafından ±1'e kırpılır.
+    const clip = ctx.createWaveShaper();
+    clip.curve = new Float32Array([-1, 1]);
+    clip.oversample = "4x";
+    out = ctx.createGain();
+    out.gain.value = l.out;
+    osc.connect(drive).connect(clip).connect(out);
 
     if (sinkId && "setSinkId" in AudioContext.prototype) {
       await ctx.setSinkId(sinkId);
-      limiter.connect(ctx.destination);
+      out.connect(ctx.destination);
     } else if (sinkId && "setSinkId" in HTMLMediaElement.prototype) {
       const dest = ctx.createMediaStreamDestination();
-      limiter.connect(dest);
+      out.connect(dest);
       routeEl = new Audio();
       routeEl.srcObject = dest.stream;
       await routeEl.setSinkId(sinkId);
       await routeEl.play();
     } else {
-      limiter.connect(ctx.destination);
+      out.connect(ctx.destination);
     }
     await ctx.resume();
-
-    // Find My benzeri: 4 kısa yükselen cıvıltı + duraklama, döngü halinde.
-    const schedule = () => {
-      const t0 = ctx.currentTime + 0.05;
-      const base = Number(pitch.value);
-      for (let i = 0; i < 4; i++) {
-        const t = t0 + i * 0.18;
-        const osc = ctx.createOscillator();
-        const env = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(base * 0.75, t);
-        osc.frequency.linearRampToValueAtTime(base * 1.25, t + 0.12);
-        env.gain.setValueAtTime(0, t);
-        env.gain.linearRampToValueAtTime(1, t + 0.005);
-        env.gain.setValueAtTime(1, t + 0.115);
-        env.gain.linearRampToValueAtTime(0, t + 0.12);
-        osc.connect(env).connect(master);
-        osc.start(t); osc.stop(t + 0.13);
-      }
-    };
-    schedule();
-    timer = setInterval(schedule, 1070);
+    osc.start();   // Durdur'a basılana kadar kesintisiz bip
+    playing = true;
   }
 
   function stopAudio() {
-    clearInterval(timer); timer = null;
+    playing = false;
     if (routeEl) { routeEl.pause(); routeEl.srcObject = null; routeEl = null; }
-    if (ctx) { ctx.close(); ctx = null; master = null; }
+    if (ctx) { ctx.close(); ctx = null; osc = null; drive = null; out = null; }
   }
 
   playBtn.onclick = async () => {
     if (!connected) return;
-    if (timer) {
+    if (playing) {
       stopAudio();
       playBtn.textContent = "▶ Çal"; playBtn.classList.remove("stop");
       playStatus.textContent = "Durduruldu.";
