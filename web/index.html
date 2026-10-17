@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AirPods Bulucu</title>
 <meta name="theme-color" content="#07090c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bulucu">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root {
     --bg: #07090c; --surface: #11151b; --surface-2: #181d25; --line: #232a34;
@@ -23,9 +31,9 @@
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    -webkit-tap-highlight-color: transparent;
+    -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
   }
-  button { font: inherit; color: inherit; cursor: pointer; }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-user-select: none; user-select: none; }
 
   .app {
     min-height: 100%; max-width: 980px; margin: 0 auto;
@@ -35,7 +43,13 @@
 
   /* Üst bar */
   .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .brand { font-weight: 700; font-size: 18px; letter-spacing: -.01em; white-space: nowrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -.01em; white-space: nowrap; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .install {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 12px; font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap;
+  }
   .pill {
     display: inline-flex; align-items: center; gap: 8px; min-width: 0;
     background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
@@ -137,10 +151,13 @@
 <body>
 <div class="app" id="app">
   <header class="top">
-    <div class="brand">AirPods Bulucu</div>
-    <button class="pill" id="pill" aria-haspopup="dialog">
-      <span class="dot"></span><span id="pillText">Cihaz seç</span>
-    </button>
+    <div class="brand"><img src="favicon.svg" alt="">Bulucu</div>
+    <div class="actions">
+      <button class="install" id="installBtn" hidden>Yükle</button>
+      <button class="pill" id="pill" aria-haspopup="dialog">
+        <span class="dot"></span><span id="pillText">Cihaz seç</span>
+      </button>
+    </div>
   </header>
 
   <section class="stage" id="stage">
@@ -180,6 +197,19 @@
     <div id="manual" hidden></div>
     <p class="msg" id="sheetMsg"></p>
     <button class="btn ghost" id="closeSheet">Kapat</button>
+  </div>
+</dialog>
+
+<dialog id="installSheet">
+  <div class="sheet">
+    <h2>Ana ekrana ekle</h2>
+    <p class="lead">Bulucu, uygulama gibi tam ekran açılır.</p>
+    <ol class="steps">
+      <li>Safari'nin alt çubuğundaki <b>Paylaş</b> simgesine dokun.</li>
+      <li><b>Ana Ekrana Ekle</b>'yi seç.</li>
+      <li><b>Ekle</b>'ye dokun.</li>
+    </ol>
+    <button class="btn ghost" id="closeInstall">Kapat</button>
   </div>
 </dialog>
 
@@ -365,6 +395,35 @@
   };
 
   render();
+
+  // ---- Web App ----
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+  const installBtn = $("installBtn"), installSheet = $("installSheet");
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let deferredPrompt = null;
+  // Chrome / Edge / Android: tarayıcının kendi yükleme penceresi
+  addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.hidden = false;
+  });
+  addEventListener("appinstalled", () => { installBtn.hidden = true; });
+  // iOS Safari'de yükleme API'si yok; adımları göster
+  if (isIOS && !standalone) installBtn.hidden = false;
+  installBtn.onclick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.hidden = true;
+    } else {
+      installSheet.showModal();
+    }
+  };
+  $("closeInstall").onclick = () => installSheet.close();
+  installSheet.addEventListener("click", (e) => { if (e.target === installSheet) installSheet.close(); });
 })();
 </script>
 </body>
