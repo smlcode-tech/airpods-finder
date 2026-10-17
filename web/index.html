@@ -136,7 +136,7 @@
     width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--line);
     border-radius: 14px; padding: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px;
   }
-  .dev.airpods { border-color: var(--accent); }
+  .dev.headset { border-color: var(--accent); }
   .dev.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
   .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
   .steps li { margin: 4px 0; }
@@ -166,7 +166,7 @@
       <span>
         <span class="icon" id="bigIcon">🎧</span>
         <span class="label" id="bigLabel" style="display:block">Önce bağlan</span>
-        <span class="sub" id="bigSub" style="display:block">AirPods'u seçmek için dokun</span>
+        <span class="sub" id="bigSub" style="display:block">Kulaklığını seçmek için dokun</span>
       </span>
     </button>
   </section>
@@ -184,7 +184,7 @@
     </div>
     <div class="note">
       <span>⚠️</span>
-      <span><b>Kulakta değilken çalmıyorsa</b> AirPods ayarlarından <b>Otomatik Kulak Algılama</b>'yı kapat. AirPods kulağındayken çalma; ses işitmene zarar verebilir.</span>
+      <span><b>Takılı değilken çalmıyorsa</b> kulaklığının <b>kulak algılama</b> ayarını kapat (AirPods'ta: Otomatik Kulak Algılama). Kulaklık kulağındayken çalma; ses işitmene zarar verebilir.</span>
     </div>
   </section>
 </div>
@@ -192,7 +192,7 @@
 <dialog id="sheet">
   <div class="sheet">
     <h2>Ses çıkışı seç</h2>
-    <p class="lead" id="sheetLead">AirPods'un Bluetooth ile bağlı olmalı.</p>
+    <p class="lead" id="sheetLead">Kulaklığın Bluetooth ile bağlı olmalı.</p>
     <ul class="devices" id="deviceList"></ul>
     <div id="manual" hidden></div>
     <p class="msg" id="sheetMsg"></p>
@@ -230,13 +230,15 @@
   const canSelectOutput = !!(navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput);
   const canSetSink = "setSinkId" in HTMLMediaElement.prototype ||
     (window.AudioContext && "setSinkId" in AudioContext.prototype);
+  // Cihaz adından kulaklık tahmini; eşleşenler listede üste çıkar ve vurgulanır.
+  const HEADSET = /airpods|beats|buds|pods|headphone|headset|earphone|earbud|kulakl|bose|jabra|sennheiser|wh-|wf-|jbl|soundcore/i;
   const canEnumerate = !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) && canSetSink;
 
   function render() {
     app.classList.toggle("ready", connected && !playing);
     app.classList.toggle("playing", playing);
     if (!connected) {
-      bigIcon.textContent = "🎧"; bigLabel.textContent = "Önce bağlan"; bigSub.textContent = "AirPods'u seçmek için dokun";
+      bigIcon.textContent = "🎧"; bigLabel.textContent = "Önce bağlan"; bigSub.textContent = "Kulaklığını seçmek için dokun";
     } else if (playing) {
       bigIcon.textContent = "■"; bigLabel.textContent = "Durdur"; bigSub.textContent = "Sese doğru yürü";
     } else {
@@ -256,14 +258,14 @@
     manual.hidden = false;
     $("sheetLead").textContent = "Bu tarayıcı ses çıkışını kendisi seçemiyor.";
     manual.innerHTML = (isIOS
-      ? "<ol class='steps'><li>Kutunun kapağını aç, AirPods'u telefonun yanına getir.</li>" +
+      ? "<ol class='steps'><li>Kulaklığını aç (kutusu varsa kapağını aç) ve telefonun yanına getir.</li>" +
         "<li>Denetim Merkezi'ni aç, müzik kartındaki AirPlay simgesine dokun.</li>" +
-        "<li>Listeden AirPods'u seç ve buraya geri dön.</li></ol>"
-      : "<ol class='steps'><li>AirPods'u cihazının Bluetooth ayarlarından bağla.</li>" +
-        "<li>Ses çıkışı olarak AirPods'u seç ve buraya geri dön.</li></ol>");
+        "<li>Listeden kulaklığını seç ve buraya geri dön.</li></ol>"
+      : "<ol class='steps'><li>Kulaklığını cihazının Bluetooth ayarlarından bağla.</li>" +
+        "<li>Ses çıkışı olarak kulaklığını seç ve buraya geri dön.</li></ol>");
     const ok = document.createElement("button");
     ok.className = "btn";
-    ok.textContent = "AirPods'u bağladım";
+    ok.textContent = "Kulaklığımı bağladım";
     ok.onclick = () => markConnected("Sistem çıkışı");
     manual.appendChild(ok);
   }
@@ -276,26 +278,26 @@
     } catch (e) { /* izin verilmezse adlar boş gelir */ }
     const outs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audiooutput");
     if (!outs.length || outs.every((d) => !d.label)) { showManual(); return; }
-    outs.sort((a, b) => /airpods/i.test(b.label) - /airpods/i.test(a.label));
+    outs.sort((a, b) => HEADSET.test(b.label) - HEADSET.test(a.label));
     for (const d of outs) {
-      const isPods = /airpods/i.test(d.label);
+      const isHeadset = HEADSET.test(d.label);
       const li = document.createElement("li");
       const b = document.createElement("button");
-      b.className = "dev" + (isPods ? " airpods" : "") + (d.deviceId === sinkId ? " sel" : "");
-      b.innerHTML = "<span></span><span>" + (isPods ? "🎧" : "") + "</span>";
+      b.className = "dev" + (isHeadset ? " headset" : "") + (d.deviceId === sinkId ? " sel" : "");
+      b.innerHTML = "<span></span><span>" + (isHeadset ? "🎧" : "") + "</span>";
       b.firstChild.textContent = d.label || "Bilinmeyen cihaz";
       b.onclick = () => { sinkId = d.deviceId; markConnected(d.label || "Seçilen cihaz"); };
       li.appendChild(b);
       deviceList.appendChild(li);
     }
-    sheetMsg.textContent = outs.some((d) => /airpods/i.test(d.label))
-      ? "" : "Listede AirPods yok. Önce Bluetooth ayarlarından bağla, sonra tekrar aç.";
+    sheetMsg.textContent = outs.some((d) => HEADSET.test(d.label))
+      ? "" : "Listede kulaklık görünmüyor. Önce Bluetooth ayarlarından bağla, sonra tekrar aç.";
   }
 
   async function openPicker() {
     if (playing) stopAudio();
     deviceList.innerHTML = ""; manual.innerHTML = ""; manual.hidden = true; sheetMsg.textContent = "";
-    $("sheetLead").textContent = "AirPods'un Bluetooth ile bağlı olmalı.";
+    $("sheetLead").textContent = "Kulaklığın Bluetooth ile bağlı olmalı.";
     try {
       if (canSelectOutput) {
         // Tarayıcının kendi seçim penceresi; kullanıcı dokunuşu içinde çağrılmalı.
