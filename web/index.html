@@ -2,110 +2,194 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AirPods Bulucu</title>
-<meta name="theme-color" content="#0b0d10">
+<meta name="theme-color" content="#07090c">
 <style>
   :root {
-    --bg: #f5f6f8; --card: #ffffff; --text: #111418; --muted: #5d6570;
-    --line: #e2e5ea; --accent: #0a84ff; --accent-text: #ffffff;
-    --ok: #1f9d55; --warn-bg: #fff4e5; --warn-text: #8a4b00; --danger: #e5484d;
+    --bg: #07090c; --surface: #11151b; --surface-2: #181d25; --line: #232a34;
+    --text: #eef1f5; --muted: #8b95a3; --accent: #2f8cff; --accent-glow: rgba(47,140,255,.35);
+    --ok: #34d17a; --hot: #ff4d5e; --hot-glow: rgba(255,77,94,.35); --warn: #f5b759;
   }
-  @media (prefers-color-scheme: dark) {
+  @media (prefers-color-scheme: light) {
     :root {
-      --bg: #0b0d10; --card: #15181d; --text: #eef0f3; --muted: #9aa3ad;
-      --line: #262b32; --accent: #0a84ff; --accent-text: #ffffff;
-      --ok: #3ccf7e; --warn-bg: #2a1e0d; --warn-text: #f5b759; --danger: #ff6369;
+      --bg: #eef1f5; --surface: #ffffff; --surface-2: #f5f7fa; --line: #dde2e9;
+      --text: #0f1318; --muted: #5f6977; --accent: #0a6cf0; --accent-glow: rgba(10,108,240,.25);
+      --ok: #16a05a; --hot: #e5394b; --hot-glow: rgba(229,57,75,.25); --warn: #9a5b00;
     }
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
   }
-  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 26px; margin: 8px 0 4px; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
-  .card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-    padding: 18px; margin-bottom: 14px;
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .app {
+    min-height: 100%; max-width: 980px; margin: 0 auto;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+    display: grid; grid-template-rows: auto 1fr auto; gap: 16px;
   }
-  .step { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-weight: 600; }
-  .num {
-    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-    background: var(--line); font-size: 14px;
+
+  /* Üst bar */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { font-weight: 700; font-size: 18px; letter-spacing: -.01em; white-space: nowrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 14px 8px 10px; font-size: 14px; font-weight: 600;
   }
-  .done .num { background: var(--ok); color: #fff; }
-  button {
-    font: inherit; font-weight: 600; border: 0; border-radius: 12px; cursor: pointer;
-    padding: 14px 16px; width: 100%;
+  .pill span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(52,209,122,.18); }
+
+  /* Orta: büyük buton + halkalar */
+  .stage { display: grid; place-items: center; position: relative; min-height: 340px; }
+  .ring {
+    position: absolute; width: 230px; height: 230px; border-radius: 50%;
+    border: 2px solid var(--accent); opacity: 0; pointer-events: none;
   }
-  .primary { background: var(--accent); color: var(--accent-text); }
-  .secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); margin-top: 8px; }
-  button:disabled { opacity: .4; cursor: not-allowed; }
-  .play { font-size: 20px; padding: 22px; }
-  .play.stop { background: var(--danger); }
-  .status { margin: 10px 0 0; color: var(--muted); font-size: 14px; min-height: 1.5em; }
-  .status.ok { color: var(--ok); }
-  .devices { list-style: none; padding: 0; margin: 10px 0 0; }
-  .devices li button {
-    background: transparent; color: var(--text); border: 1px solid var(--line);
-    text-align: left; margin-top: 6px; font-weight: 500;
+  .playing .ring { border-color: var(--hot); animation: pulse 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
+  .playing .ring:nth-child(2) { animation-delay: .8s; }
+  .playing .ring:nth-child(3) { animation-delay: 1.6s; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.75); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .playing .ring { animation: none; opacity: .4; transform: scale(1.2); } }
+
+  .big {
+    position: relative; width: 230px; height: 230px; border-radius: 50%; border: 0;
+    background: radial-gradient(circle at 50% 35%, var(--surface-2), var(--surface));
+    box-shadow: inset 0 0 0 2px var(--line);
+    display: grid; place-items: center; text-align: center; transition: transform .15s, box-shadow .3s;
   }
-  .devices li button.airpods { border-color: var(--accent); }
-  .devices li button.sel { background: var(--accent); color: var(--accent-text); }
-  .row { display: flex; justify-content: space-between; align-items: baseline; }
-  input[type=range] { width: 100%; accent-color: var(--accent); margin: 10px 0 4px; height: 28px; }
-  .val { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .warn {
-    background: var(--warn-bg); color: var(--warn-text); border-radius: 12px;
-    padding: 12px 14px; font-size: 14px; margin-bottom: 14px;
+  .big:active { transform: scale(.97); }
+  .big .icon { font-size: 54px; line-height: 1; }
+  .big .label { font-weight: 700; font-size: 20px; margin-top: 8px; }
+  .big .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .ready .big {
+    background: radial-gradient(circle at 50% 35%, #4aa0ff, var(--accent));
+    color: #fff; box-shadow: 0 18px 60px var(--accent-glow);
   }
-  .hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
-  .hint ol { margin: 6px 0 0; padding-left: 20px; }
-  label.chk { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; margin-top: 12px; }
-  label.chk input { margin-top: 3px; width: 18px; height: 18px; }
+  .ready .big .sub { color: rgba(255,255,255,.8); }
+  .playing .big {
+    background: radial-gradient(circle at 50% 35%, #ff7381, var(--hot));
+    color: #fff; box-shadow: 0 18px 60px var(--hot-glow);
+  }
+  .playing .big .sub { color: rgba(255,255,255,.85); }
+
+  /* Alt: kontroller */
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 14px 10px;
+  }
+  .tile .k { font-size: 13px; color: var(--muted); }
+  .tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .tile .v small { font-size: 13px; font-weight: 600; color: var(--hot); margin-left: 4px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 30px; margin: 4px 0 0; }
+  .note {
+    grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start;
+    font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 10px 12px;
+  }
+  .note b { color: var(--warn); }
+
+  /* Geniş ekran: buton solda, kontroller sağda */
+  @media (min-width: 820px) {
+    .app { grid-template-columns: 1.2fr 1fr; grid-template-rows: auto 1fr; column-gap: 32px; }
+    .top { grid-column: 1 / -1; }
+    .stage { min-height: 520px; }
+    .controls { align-content: center; grid-template-columns: 1fr; }
+    .ring, .big { width: 280px; height: 280px; }
+  }
+
+  /* Cihaz seçme paneli */
+  dialog {
+    border: 0; padding: 0; background: transparent; color: var(--text);
+    width: 100%; max-width: 520px; margin: auto auto 0; max-height: 85vh;
+  }
+  @media (min-width: 820px) { dialog { margin: auto; } }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  .sheet {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 22px 22px 0 0;
+    padding: 18px 16px max(18px, env(safe-area-inset-bottom));
+  }
+  @media (min-width: 820px) { .sheet { border-radius: 22px; } }
+  .sheet h2 { font-size: 18px; margin: 0 0 4px; }
+  .sheet .lead { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .devices { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .dev {
+    width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .dev.airpods { border-color: var(--accent); }
+  .dev.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .steps li { margin: 4px 0; }
+  .btn {
+    width: 100%; border: 0; border-radius: 14px; padding: 14px; font-weight: 700; margin-top: 12px;
+    background: var(--accent); color: #fff;
+  }
+  .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 8px; }
+  .msg { font-size: 14px; color: var(--muted); margin: 10px 0 0; min-height: 1.2em; }
 </style>
 </head>
 <body>
-<main>
-  <h1>AirPods Bulucu</h1>
-  <p class="sub">AirPods'u bağla, ses seviyesini ayarla ve kesintisiz bip sesi çal.</p>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">AirPods Bulucu</div>
+    <button class="pill" id="pill" aria-haspopup="dialog">
+      <span class="dot"></span><span id="pillText">Cihaz seç</span>
+    </button>
+  </header>
 
-  <div class="warn">
-    <strong>Uyarı:</strong> AirPods kulağındayken çalma. Yüksek seste tiz ses işitmene zarar verebilir.
-  </div>
+  <section class="stage" id="stage">
+    <span class="ring"></span><span class="ring"></span><span class="ring"></span>
+    <button class="big" id="big" aria-live="polite">
+      <span>
+        <span class="icon" id="bigIcon">🎧</span>
+        <span class="label" id="bigLabel" style="display:block">Önce bağlan</span>
+        <span class="sub" id="bigSub" style="display:block">AirPods'u seçmek için dokun</span>
+      </span>
+    </button>
+  </section>
 
-  <section class="card" id="connectCard">
-    <p class="step"><span class="num">1</span>AirPods'a bağlan</p>
-    <button class="primary" id="connectBtn">Bluetooth cihazı seç</button>
+  <section class="controls">
+    <div class="tile">
+      <div class="k">Şiddet</div>
+      <div class="v"><span id="volVal">200%</span><small id="boost">BOOST</small></div>
+      <input type="range" id="vol" min="0" max="200" value="200" aria-label="Ses şiddeti">
+    </div>
+    <div class="tile">
+      <div class="k">Ton</div>
+      <div class="v" id="pitchVal">1.0 kHz</div>
+      <input type="range" id="pitch" min="500" max="4000" step="50" value="1000" aria-label="Ton yüksekliği">
+    </div>
+    <div class="note">
+      <span>⚠️</span>
+      <span><b>Kulakta değilken çalmıyorsa</b> AirPods ayarlarından <b>Otomatik Kulak Algılama</b>'yı kapat. AirPods kulağındayken çalma; ses işitmene zarar verebilir.</span>
+    </div>
+  </section>
+</div>
+
+<dialog id="sheet">
+  <div class="sheet">
+    <h2>Ses çıkışı seç</h2>
+    <p class="lead" id="sheetLead">AirPods'un Bluetooth ile bağlı olmalı.</p>
     <ul class="devices" id="deviceList"></ul>
-    <div class="hint" id="connectHint" hidden></div>
-    <p class="status" id="connectStatus"></p>
-  </section>
-
-  <section class="card">
-    <p class="step"><span class="num">2</span>Ses seviyesi</p>
-    <div class="row"><span>Şiddet</span><span class="val" id="volVal">200% · boost</span></div>
-    <input type="range" id="vol" min="0" max="200" value="200" aria-label="Ses şiddeti">
-    <div class="row"><span>Ton</span><span class="val" id="pitchVal">1.0 kHz</span></div>
-    <input type="range" id="pitch" min="500" max="4000" step="50" value="1000" aria-label="Ton yüksekliği">
-    <p class="hint">%100'ün üstü boost: ses kırpılarak sertleşir ve daha gür duyulur. 1 kHz klasik sansür bip sesidir; 2–3 kHz uzaktan daha iyi duyulur. Sistem sesini de ses tuşlarıyla sonuna kadar aç.</p>
-  </section>
-
-  <section class="card">
-    <p class="step"><span class="num">3</span>Çal</p>
-    <button class="primary play" id="playBtn" disabled>▶ Çal</button>
-    <p class="status" id="playStatus">Önce AirPods'a bağlan.</p>
-  </section>
-</main>
+    <div id="manual" hidden></div>
+    <p class="msg" id="sheetMsg"></p>
+    <button class="btn ghost" id="closeSheet">Kapat</button>
+  </div>
+</dialog>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const connectBtn = $("connectBtn"), deviceList = $("deviceList"), connectHint = $("connectHint");
-  const connectStatus = $("connectStatus"), playBtn = $("playBtn"), playStatus = $("playStatus");
-  const vol = $("vol"), volVal = $("volVal"), pitch = $("pitch"), pitchVal = $("pitchVal");
+  const app = $("app"), pill = $("pill"), pillText = $("pillText");
+  const big = $("big"), bigIcon = $("bigIcon"), bigLabel = $("bigLabel"), bigSub = $("bigSub");
+  const sheet = $("sheet"), deviceList = $("deviceList"), manual = $("manual"), sheetMsg = $("sheetMsg");
+  const vol = $("vol"), volVal = $("volVal"), boost = $("boost"), pitch = $("pitch"), pitchVal = $("pitchVal");
 
   let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
   let connected = false;
@@ -118,79 +202,90 @@
     (window.AudioContext && "setSinkId" in AudioContext.prototype);
   const canEnumerate = !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) && canSetSink;
 
+  function render() {
+    app.classList.toggle("ready", connected && !playing);
+    app.classList.toggle("playing", playing);
+    if (!connected) {
+      bigIcon.textContent = "🎧"; bigLabel.textContent = "Önce bağlan"; bigSub.textContent = "AirPods'u seçmek için dokun";
+    } else if (playing) {
+      bigIcon.textContent = "■"; bigLabel.textContent = "Durdur"; bigSub.textContent = "Sese doğru yürü";
+    } else {
+      bigIcon.textContent = "▶"; bigLabel.textContent = "Çal"; bigSub.textContent = "Kesintisiz bip";
+    }
+  }
+
   function markConnected(label) {
     connected = true;
-    $("connectCard").classList.add("done");
-    connectStatus.textContent = "Bağlandı: " + label;
-    connectStatus.className = "status ok";
-    playBtn.disabled = false;
-    playStatus.textContent = "Hazır.";
+    pill.classList.add("on");
+    pillText.textContent = label;
+    render();
+    if (sheet.open) sheet.close();
   }
 
-  function showManualHint() {
-    connectHint.hidden = false;
-    connectHint.innerHTML = isIOS
-      ? "Bu cihazda tarayıcı ses çıkışını kendisi seçemiyor. AirPods'u şöyle bağla:" +
-        "<ol><li>Kutunun kapağını aç, AirPods'u telefonun yanına getir.</li>" +
+  function showManual() {
+    manual.hidden = false;
+    $("sheetLead").textContent = "Bu tarayıcı ses çıkışını kendisi seçemiyor.";
+    manual.innerHTML = (isIOS
+      ? "<ol class='steps'><li>Kutunun kapağını aç, AirPods'u telefonun yanına getir.</li>" +
         "<li>Denetim Merkezi'ni aç, müzik kartındaki AirPlay simgesine dokun.</li>" +
         "<li>Listeden AirPods'u seç ve buraya geri dön.</li></ol>"
-      : "Bu tarayıcı ses çıkışını kendisi seçemiyor. AirPods'u cihazının Bluetooth ayarlarından bağla, " +
-        "ses çıkışı olarak seç ve buraya geri dön.";
+      : "<ol class='steps'><li>AirPods'u cihazının Bluetooth ayarlarından bağla.</li>" +
+        "<li>Ses çıkışı olarak AirPods'u seç ve buraya geri dön.</li></ol>");
     const ok = document.createElement("button");
-    ok.className = "secondary";
+    ok.className = "btn";
     ok.textContent = "AirPods'u bağladım";
-    ok.onclick = () => { markConnected("sistem ses çıkışı"); ok.remove(); };
-    connectHint.appendChild(ok);
+    ok.onclick = () => markConnected("Sistem çıkışı");
+    manual.appendChild(ok);
   }
 
-  async function pickWithEnumerate() {
+  async function listOutputs() {
     // Cihaz adlarını görmek için tarayıcı mikrofon izni ister; mikrofon hemen kapatılır.
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
       s.getTracks().forEach((t) => t.stop());
     } catch (e) { /* izin verilmezse adlar boş gelir */ }
     const outs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audiooutput");
-    deviceList.innerHTML = "";
-    if (!outs.length || outs.every((d) => !d.label)) { showManualHint(); return; }
+    if (!outs.length || outs.every((d) => !d.label)) { showManual(); return; }
     outs.sort((a, b) => /airpods/i.test(b.label) - /airpods/i.test(a.label));
     for (const d of outs) {
+      const isPods = /airpods/i.test(d.label);
       const li = document.createElement("li");
       const b = document.createElement("button");
-      b.textContent = (d.label || "Bilinmeyen cihaz") + (/airpods/i.test(d.label) ? "  🎧" : "");
-      if (/airpods/i.test(d.label)) b.classList.add("airpods");
-      b.onclick = () => {
-        deviceList.querySelectorAll("button").forEach((x) => x.classList.remove("sel"));
-        b.classList.add("sel");
-        sinkId = d.deviceId;
-        markConnected(d.label || "seçilen cihaz");
-      };
+      b.className = "dev" + (isPods ? " airpods" : "") + (d.deviceId === sinkId ? " sel" : "");
+      b.innerHTML = "<span></span><span>" + (isPods ? "🎧" : "") + "</span>";
+      b.firstChild.textContent = d.label || "Bilinmeyen cihaz";
+      b.onclick = () => { sinkId = d.deviceId; markConnected(d.label || "Seçilen cihaz"); };
       li.appendChild(b);
       deviceList.appendChild(li);
     }
-    connectStatus.textContent = outs.some((d) => /airpods/i.test(d.label))
-      ? "AirPods'u listeden seç."
-      : "Listede AirPods yok. Önce Bluetooth ayarlarından bağla, sonra tekrar dene.";
-    connectStatus.className = "status";
+    sheetMsg.textContent = outs.some((d) => /airpods/i.test(d.label))
+      ? "" : "Listede AirPods yok. Önce Bluetooth ayarlarından bağla, sonra tekrar aç.";
   }
 
-  connectBtn.onclick = async () => {
-    connectHint.hidden = true; connectHint.innerHTML = "";
+  async function openPicker() {
+    if (playing) stopAudio();
+    deviceList.innerHTML = ""; manual.innerHTML = ""; manual.hidden = true; sheetMsg.textContent = "";
+    $("sheetLead").textContent = "AirPods'un Bluetooth ile bağlı olmalı.";
     try {
       if (canSelectOutput) {
+        // Tarayıcının kendi seçim penceresi; kullanıcı dokunuşu içinde çağrılmalı.
         const d = await navigator.mediaDevices.selectAudioOutput();
         sinkId = d.deviceId;
-        markConnected(d.label || "seçilen cihaz");
-      } else if (canEnumerate) {
-        await pickWithEnumerate();
-      } else {
-        showManualHint();
+        markConnected(d.label || "Seçilen cihaz");
+        return;
       }
+      sheet.showModal();
+      if (canEnumerate) await listOutputs(); else showManual();
     } catch (e) {
-      connectStatus.textContent = "Cihaz seçilmedi.";
-      connectStatus.className = "status";
-      showManualHint();
+      if (!sheet.open) sheet.showModal();
+      sheetMsg.textContent = "Cihaz seçilmedi.";
+      showManual();
     }
-  };
+  }
+
+  pill.onclick = openPicker;
+  $("closeSheet").onclick = () => sheet.close();
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
 
   // ---- Ses ----
   // 0-100: temiz ses, seviye düşer. 100-200: boost; sinyal 8 kata kadar sürülüp
@@ -202,7 +297,8 @@
       : { drive: 1 + (v - 100) / 100 * 7, out: 0.95 };
   }
   vol.oninput = () => {
-    volVal.textContent = vol.value + "%" + (vol.value > 100 ? " · boost" : "");
+    volVal.textContent = vol.value + "%";
+    boost.hidden = vol.value <= 100;
     if (!ctx) return;
     const l = levels();
     drive.gain.setTargetAtTime(l.drive, ctx.currentTime, 0.02);
@@ -253,25 +349,22 @@
     playing = false;
     if (routeEl) { routeEl.pause(); routeEl.srcObject = null; routeEl = null; }
     if (ctx) { ctx.close(); ctx = null; osc = null; drive = null; out = null; }
+    render();
   }
 
-  playBtn.onclick = async () => {
-    if (!connected) return;
-    if (playing) {
-      stopAudio();
-      playBtn.textContent = "▶ Çal"; playBtn.classList.remove("stop");
-      playStatus.textContent = "Durduruldu.";
-      return;
-    }
+  big.onclick = async () => {
+    if (!connected) { openPicker(); return; }
+    if (playing) { stopAudio(); return; }
     try {
       await startAudio();
-      playBtn.textContent = "■ Durdur"; playBtn.classList.add("stop");
-      playStatus.textContent = "Çalıyor… Sesin geldiği yöne doğru yürü.";
+      render();
     } catch (e) {
       stopAudio();
-      playStatus.textContent = "Çalınamadı: " + (e && e.message ? e.message : e);
+      bigSub.textContent = "Çalınamadı: " + (e && e.message ? e.message : e);
     }
   };
+
+  render();
 })();
 </script>
 </body>
