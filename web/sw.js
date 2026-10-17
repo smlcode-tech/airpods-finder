@@ -1,5 +1,5 @@
 // Uygulama kabuğunu önbelleğe alır; internet yokken de açılır.
-const CACHE = "bleep-v4";
+const CACHE = "bleep-v5";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest", "./favicon.svg", "./favicon.ico",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png",

@@ -22,7 +22,7 @@ Bunları değiştirmeye ya da aşmaya çalışma, kullanıcıya da aksini vaat e
 ### Ekran düzeni
 Telefon öncelikli, tek ekran. Her şey alt alta dizilmiş bir form gibi değil:
 
-- **Üst bar:** Solda sadece uygulama ikonu (yazı yok, `alt="Bleep"`). Sağda iki hap şeklinde buton:
+- **Üst bar:** Solda uygulama ikonu (38px) ve yanında **Fredoka Bold** yazı tipiyle "Bleep" yazısı. Yazı, font dosyası gerektirmesin diye satır içi SVG çizim olarak gömülü ve temanın yazı rengini alır. Sağda iki hap şeklinde buton:
   - **"Yükle"**: Sadece uygulama yüklenebilir olduğunda görünür.
   - **Cihaz göstergesi**: Bir durum noktası ve metin. Bağlanmadan önce "Cihaz seç" yazar. Bağlandıktan sonra cihazın adını yazar, nokta sarı olur. Dokununca cihaz seçme paneli açılır.
 - **Ortada büyük yuvarlak buton** (telefonda 230px, geniş ekranda 280px). Üç durumu var:
