@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bleep</title>
-<meta name="theme-color" content="#07090c">
+<meta name="theme-color" content="#0f0e0b">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -15,15 +15,18 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root {
-    --bg: #07090c; --surface: #11151b; --surface-2: #181d25; --line: #232a34;
-    --text: #eef1f5; --muted: #8b95a3; --accent: #2f8cff; --accent-glow: rgba(47,140,255,.35);
-    --ok: #34d17a; --hot: #ff4d5e; --hot-glow: rgba(255,77,94,.35); --warn: #f5b759;
+    /* İkonla aynı palet: sarı #ffd23f + mürekkep siyahı #111 */
+    --bg: #0f0e0b; --surface: #1a1915; --surface-2: #23211b; --line: #312e25;
+    --text: #f6f3ea; --muted: #a8a291; --ink: #ffd23f;
+    --accent: #ffd23f; --accent-hi: #ffe27a; --on-accent: #111111; --accent-glow: rgba(255,210,63,.30);
+    --ok: #ffd23f; --hot: #ff6b3d; --hot-hi: #ff8c66; --hot-glow: rgba(255,107,61,.32); --warn: #ffd23f;
   }
   @media (prefers-color-scheme: light) {
     :root {
-      --bg: #eef1f5; --surface: #ffffff; --surface-2: #f5f7fa; --line: #dde2e9;
-      --text: #0f1318; --muted: #5f6977; --accent: #0a6cf0; --accent-glow: rgba(10,108,240,.25);
-      --ok: #16a05a; --hot: #e5394b; --hot-glow: rgba(229,57,75,.25); --warn: #9a5b00;
+      --bg: #fff8e1; --surface: #ffffff; --surface-2: #fffdf5; --line: #efe4bf;
+      --text: #111111; --muted: #6b6450; --ink: #111111;
+      --accent: #ffd23f; --accent-hi: #ffe27a; --on-accent: #111111; --accent-glow: rgba(214,166,0,.35);
+      --ok: #e0a800; --hot: #f2552c; --hot-hi: #ff7a52; --hot-glow: rgba(242,85,44,.28); --warn: #8a6a00;
     }
   }
   * { box-sizing: border-box; }
@@ -48,7 +51,7 @@
   .actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .install {
     background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-    padding: 8px 12px; font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap;
+    padding: 8px 12px; font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap;
   }
   .pill {
     display: inline-flex; align-items: center; gap: 8px; min-width: 0;
@@ -57,7 +60,7 @@
   }
   .pill span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(52,209,122,.18); }
+  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 4px var(--accent-glow); }
 
   /* Orta: büyük buton + halkalar */
   .stage { display: grid; place-items: center; position: relative; min-height: 340px; }
@@ -82,15 +85,15 @@
   .big .label { font-weight: 700; font-size: 20px; margin-top: 8px; }
   .big .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .ready .big {
-    background: radial-gradient(circle at 50% 35%, #4aa0ff, var(--accent));
-    color: #fff; box-shadow: 0 18px 60px var(--accent-glow);
+    background: radial-gradient(circle at 50% 35%, var(--accent-hi), var(--accent));
+    color: var(--on-accent); box-shadow: 0 18px 60px var(--accent-glow);
   }
-  .ready .big .sub { color: rgba(255,255,255,.8); }
+  .ready .big .sub { color: rgba(17,17,17,.7); }
   .playing .big {
-    background: radial-gradient(circle at 50% 35%, #ff7381, var(--hot));
-    color: #fff; box-shadow: 0 18px 60px var(--hot-glow);
+    background: radial-gradient(circle at 50% 35%, var(--hot-hi), var(--hot));
+    color: var(--on-accent); box-shadow: 0 18px 60px var(--hot-glow);
   }
-  .playing .big .sub { color: rgba(255,255,255,.85); }
+  .playing .big .sub { color: rgba(17,17,17,.7); }
 
   /* Alt: kontroller */
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -100,7 +103,7 @@
   .tile .k { font-size: 13px; color: var(--muted); }
   .tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
   .tile .v small { font-size: 13px; font-weight: 600; color: var(--hot); margin-left: 4px; }
-  input[type=range] { width: 100%; accent-color: var(--accent); height: 30px; margin: 4px 0 0; }
+  input[type=range] { width: 100%; accent-color: var(--ink); height: 30px; margin: 4px 0 0; }
   .note {
     grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start;
     font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line);
@@ -137,12 +140,12 @@
     border-radius: 14px; padding: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px;
   }
   .dev.headset { border-color: var(--accent); }
-  .dev.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .dev.sel { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
   .steps li { margin: 4px 0; }
   .btn {
     width: 100%; border: 0; border-radius: 14px; padding: 14px; font-weight: 700; margin-top: 12px;
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: var(--on-accent);
   }
   .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 8px; }
   .msg { font-size: 14px; color: var(--muted); margin: 10px 0 0; min-height: 1.2em; }
