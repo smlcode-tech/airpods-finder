@@ -1,7 +1,7 @@
 {
-  "name": "AirPods Bulucu",
-  "short_name": "Bulucu",
-  "description": "Bağlı AirPods'u yüksek sesle çaldırarak bul.",
+  "name": "Çınla",
+  "short_name": "Çınla",
+  "description": "Kulaklığını çınlat, sesinden bul.",
   "lang": "tr",
   "start_url": "./",
   "scope": "./",
