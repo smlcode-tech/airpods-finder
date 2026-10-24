@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bleep</title>
+<meta name="theme-color" content="#0f0e0b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bleep">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root {
+    /* İkonla aynı palet: sarı #ffd23f + mürekkep siyahı #111 */
+    --bg: #0f0e0b; --surface: #1a1915; --surface-2: #23211b; --line: #312e25;
+    --text: #f6f3ea; --muted: #a8a291; --ink: #ffd23f;
+    --accent: #ffd23f; --accent-hi: #ffe27a; --on-accent: #111111; --accent-glow: rgba(255,210,63,.30);
+    --ok: #ffd23f; --hot: #ff6b3d; --hot-hi: #ff8c66; --hot-glow: rgba(255,107,61,.32); --warn: #ffd23f;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fff8e1; --surface: #ffffff; --surface-2: #fffdf5; --line: #efe4bf;
+      --text: #111111; --muted: #6b6450; --ink: #111111;
+      --accent: #ffd23f; --accent-hi: #ffe27a; --on-accent: #111111; --accent-glow: rgba(214,166,0,.35);
+      --ok: #e0a800; --hot: #f2552c; --hot-hi: #ff7a52; --hot-glow: rgba(242,85,44,.28); --warn: #8a6a00;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-user-select: none; user-select: none; }
+
+  .app {
+    min-height: 100%; max-width: 980px; margin: 0 auto;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+    display: grid; grid-template-rows: auto 1fr auto; gap: 16px;
+  }
+
+  /* Üst bar */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -.01em; white-space: nowrap; }
+  .brand img { width: 38px; height: 38px; border-radius: 10px; }
+  /* "Bleep" yazısı: Fredoka Bold, SVG çizime çevrilmiş (font dosyası gerekmez) */
+  .wordmark { height: 27px; width: 70px; color: var(--text); transform: translateY(3px); }
+  .actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .install {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 12px; font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 14px 8px 10px; font-size: 14px; font-weight: 600;
+  }
+  .pill span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 4px var(--accent-glow); }
+
+  /* Orta: büyük buton + halkalar */
+  .stage { display: grid; place-items: center; position: relative; min-height: 340px; }
+  .ring {
+    position: absolute; width: 230px; height: 230px; border-radius: 50%;
+    border: 2px solid var(--accent); opacity: 0; pointer-events: none;
+  }
+  .playing .ring { border-color: var(--hot); animation: pulse 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
+  .playing .ring:nth-child(2) { animation-delay: .8s; }
+  .playing .ring:nth-child(3) { animation-delay: 1.6s; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.75); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .playing .ring { animation: none; opacity: .4; transform: scale(1.2); } }
+
+  .big {
+    position: relative; width: 230px; height: 230px; border-radius: 50%; border: 0;
+    background: radial-gradient(circle at 50% 35%, var(--surface-2), var(--surface));
+    box-shadow: inset 0 0 0 2px var(--line);
+    display: grid; place-items: center; text-align: center; transition: transform .15s, box-shadow .3s;
+  }
+  .big:active { transform: scale(.97); }
+  .big .icon { font-size: 54px; line-height: 1; }
+  .big .label { font-weight: 700; font-size: 20px; margin-top: 8px; }
+  .big .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .ready .big {
+    background: radial-gradient(circle at 50% 35%, var(--accent-hi), var(--accent));
+    color: var(--on-accent); box-shadow: 0 18px 60px var(--accent-glow);
+  }
+  .ready .big .sub { color: rgba(17,17,17,.7); }
+  .playing .big {
+    background: radial-gradient(circle at 50% 35%, var(--hot-hi), var(--hot));
+    color: var(--on-accent); box-shadow: 0 18px 60px var(--hot-glow);
+  }
+  .playing .big .sub { color: rgba(17,17,17,.7); }
+
+  /* Alt: kontroller */
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 14px 10px;
+  }
+  .tile .k { font-size: 13px; color: var(--muted); }
+  .tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .tile .v small { font-size: 13px; font-weight: 600; color: var(--hot); margin-left: 4px; }
+  input[type=range] { width: 100%; accent-color: var(--ink); height: 30px; margin: 4px 0 0; }
+  .note {
+    grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start;
+    font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 10px 12px;
+  }
+  .note b { color: var(--warn); }
+
+  /* Geniş ekran: buton solda, kontroller sağda */
+  @media (min-width: 820px) {
+    .app { grid-template-columns: 1.2fr 1fr; grid-template-rows: auto 1fr; column-gap: 32px; }
+    .top { grid-column: 1 / -1; }
+    .stage { min-height: 520px; }
+    .controls { align-content: center; grid-template-columns: 1fr; }
+    .ring, .big { width: 280px; height: 280px; }
+  }
+
+  /* Cihaz seçme paneli */
+  dialog {
+    border: 0; padding: 0; background: transparent; color: var(--text);
+    width: 100%; max-width: 520px; margin: auto auto 0; max-height: 85vh;
+  }
+  @media (min-width: 820px) { dialog { margin: auto; } }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  .sheet {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 22px 22px 0 0;
+    padding: 18px 16px max(18px, env(safe-area-inset-bottom));
+  }
+  @media (min-width: 820px) { .sheet { border-radius: 22px; } }
+  .sheet h2 { font-size: 18px; margin: 0 0 4px; }
+  .sheet .lead { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .devices { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .dev {
+    width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .dev.headset { border-color: var(--accent); }
+  .dev.sel { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .steps li { margin: 4px 0; }
+  .btn {
+    width: 100%; border: 0; border-radius: 14px; padding: 14px; font-weight: 700; margin-top: 12px;
+    background: var(--accent); color: var(--on-accent);
+  }
+  .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); margin-top: 8px; }
+  .msg { font-size: 14px; color: var(--muted); margin: 10px 0 0; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><img src="favicon.svg" alt=""><svg class="wordmark" role="img" aria-label="Bleep" viewBox="30 -730 2451 951"><path fill="currentColor" d="M121 8Q76 8 57.0 -5.5Q38 -19 34.0 -40.5Q30 -62 30 -85V-601Q30 -623 34.0 -644.0Q38 -665 57.0 -678.5Q76 -692 122 -692H356Q417 -692 465.0 -662.5Q513 -633 541.0 -584.0Q569 -535 569 -478Q569 -459 565.5 -439.5Q562 -420 554.5 -401.5Q547 -383 536 -366Q553 -345 565.0 -320.5Q577 -296 583.0 -270.5Q589 -245 589 -219Q588 -171 570.5 -129.5Q553 -88 522.0 -57.5Q491 -27 451.0 -9.5Q411 8 366 8ZM213 -175H356Q363 -175 375.0 -177.5Q387 -180 396.5 -191.5Q406 -203 406 -230Q406 -244 403.5 -253.5Q401 -263 396.0 -268.5Q391 -274 384.5 -276.5Q378 -279 369.5 -280.0Q361 -281 351 -281H338Q298 -281 281.0 -298.0Q264 -315 264 -358Q264 -399 282.5 -415.5Q301 -432 343 -432H355Q363 -432 369.0 -433.0Q375 -434 378.5 -438.0Q382 -442 384.0 -449.5Q386 -457 386 -470Q386 -493 375.5 -501.0Q365 -509 334 -509H213ZM841 9Q795 9 760.5 5.0Q726 1 702.0 -11.0Q678 -23 663.0 -45.5Q648 -68 641.0 -104.5Q634 -141 634 -196V-639Q634 -662 638.0 -682.5Q642 -703 661.0 -716.5Q680 -730 725 -730Q770 -730 788.5 -716.5Q807 -703 811.0 -682.0Q815 -661 815 -638V-207Q815 -192 815.5 -183.5Q816 -175 818.5 -171.0Q821 -167 826.5 -166.5Q832 -166 842 -166Q855 -166 869.5 -162.5Q884 -159 894.5 -141.5Q905 -124 905 -81Q905 -36 894.5 -17.0Q884 2 869.0 5.5Q854 9 841 9ZM1188 20Q1113 20 1061.0 -4.5Q1009 -29 977.0 -68.5Q945 -108 930.0 -154.0Q915 -200 915 -243Q915 -322 950.0 -382.0Q985 -442 1047.0 -476.0Q1109 -510 1189 -510Q1251 -510 1295.0 -490.0Q1339 -470 1366.5 -439.0Q1394 -408 1407.0 -373.0Q1420 -338 1420 -308Q1420 -251 1392.0 -221.0Q1364 -191 1320 -191H1107Q1111 -175 1123.5 -163.5Q1136 -152 1155.0 -145.5Q1174 -139 1196 -139Q1218 -139 1235.0 -141.5Q1252 -144 1264.5 -148.0Q1277 -152 1287.5 -156.0Q1298 -160 1306.5 -162.5Q1315 -165 1323 -165Q1341 -165 1356.0 -153.0Q1371 -141 1383 -117Q1390 -104 1393.0 -92.5Q1396 -81 1396 -71Q1396 -41 1371.5 -21.0Q1347 -1 1301.0 9.5Q1255 20 1188 20ZM1107 -285H1219Q1233 -285 1239.5 -291.0Q1246 -297 1246 -309Q1246 -322 1238.5 -331.0Q1231 -340 1218.0 -344.5Q1205 -349 1187 -349Q1163 -349 1145.0 -339.5Q1127 -330 1117.5 -315.5Q1108 -301 1107 -285ZM1713 20Q1638 20 1586.0 -4.5Q1534 -29 1502.0 -68.5Q1470 -108 1455.0 -154.0Q1440 -200 1440 -243Q1440 -322 1475.0 -382.0Q1510 -442 1572.0 -476.0Q1634 -510 1714 -510Q1776 -510 1820.0 -490.0Q1864 -470 1891.5 -439.0Q1919 -408 1932.0 -373.0Q1945 -338 1945 -308Q1945 -251 1917.0 -221.0Q1889 -191 1845 -191H1632Q1636 -175 1648.5 -163.5Q1661 -152 1680.0 -145.5Q1699 -139 1721 -139Q1743 -139 1760.0 -141.5Q1777 -144 1789.5 -148.0Q1802 -152 1812.5 -156.0Q1823 -160 1831.5 -162.5Q1840 -165 1848 -165Q1866 -165 1881.0 -153.0Q1896 -141 1908 -117Q1915 -104 1918.0 -92.5Q1921 -81 1921 -71Q1921 -41 1896.5 -21.0Q1872 -1 1826.0 9.5Q1780 20 1713 20ZM1632 -285H1744Q1758 -285 1764.5 -291.0Q1771 -297 1771 -309Q1771 -322 1763.5 -331.0Q1756 -340 1743.0 -344.5Q1730 -349 1712 -349Q1688 -349 1670.0 -339.5Q1652 -330 1642.5 -315.5Q1633 -301 1632 -285ZM2250 -3Q2201 -3 2165.0 -23.0Q2129 -43 2106.0 -77.5Q2083 -112 2072.0 -156.0Q2061 -200 2062 -249Q2063 -297 2074.5 -342.0Q2086 -387 2109.0 -422.0Q2132 -457 2167.0 -477.5Q2202 -498 2250 -498Q2294 -498 2335.5 -477.0Q2377 -456 2410.0 -420.5Q2443 -385 2462.0 -340.0Q2481 -295 2481 -247Q2481 -197 2462.0 -152.5Q2443 -108 2410.5 -74.5Q2378 -41 2336.5 -22.0Q2295 -3 2250 -3ZM2065 221Q2021 221 2002.0 208.0Q1983 195 1979.5 175.0Q1976 155 1976 133V-410Q1976 -432 1979.5 -452.0Q1983 -472 2001.5 -485.5Q2020 -499 2064 -499Q2099 -499 2122.0 -489.5Q2145 -480 2155 -460V132Q2157 154 2152.5 174.5Q2148 195 2129.0 208.0Q2110 221 2065 221ZM2226 -173Q2246 -173 2262.5 -183.0Q2279 -193 2289.0 -209.5Q2299 -226 2299 -245Q2299 -265 2289.5 -281.5Q2280 -298 2263.5 -307.5Q2247 -317 2227 -317Q2207 -317 2190.5 -307.0Q2174 -297 2164.5 -281.0Q2155 -265 2155 -245Q2155 -226 2165.0 -209.5Q2175 -193 2191.0 -183.0Q2207 -173 2226 -173Z"/></svg></div>
+    <div class="actions">
+      <button class="install" id="installBtn" hidden>Yükle</button>
+      <button class="pill" id="pill" aria-haspopup="dialog">
+        <span class="dot"></span><span id="pillText">Cihaz seç</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="stage" id="stage">
+    <span class="ring"></span><span class="ring"></span><span class="ring"></span>
+    <button class="big" id="big" aria-live="polite">
+      <span>
+        <span class="icon" id="bigIcon">🎧</span>
+        <span class="label" id="bigLabel" style="display:block">Önce bağlan</span>
+        <span class="sub" id="bigSub" style="display:block">Kulaklığını seçmek için dokun</span>
+      </span>
+    </button>
+  </section>
+
+  <section class="controls">
+    <div class="tile">
+      <div class="k">Şiddet</div>
+      <div class="v"><span id="volVal">200%</span><small id="boost">BOOST</small></div>
+      <input type="range" id="vol" min="0" max="200" value="200" aria-label="Ses şiddeti">
+    </div>
+    <div class="tile">
+      <div class="k">Ton</div>
+      <div class="v" id="pitchVal">1.0 kHz</div>
+      <input type="range" id="pitch" min="500" max="4000" step="50" value="1000" aria-label="Ton yüksekliği">
+    </div>
+    <div class="note">
+      <span>⚠️</span>
+      <span><b>Takılı değilken çalmıyorsa</b> kulaklığının <b>kulak algılama</b> ayarını kapat (AirPods'ta: Otomatik Kulak Algılama). Kulaklık kulağındayken çalma; ses işitmene zarar verebilir.</span>
+    </div>
+  </section>
+</div>
+
+<dialog id="sheet">
+  <div class="sheet">
+    <h2>Ses çıkışı seç</h2>
+    <p class="lead" id="sheetLead">Kulaklığın Bluetooth ile bağlı olmalı.</p>
+    <ul class="devices" id="deviceList"></ul>
+    <div id="manual" hidden></div>
+    <p class="msg" id="sheetMsg"></p>
+    <button class="btn ghost" id="closeSheet">Kapat</button>
+  </div>
+</dialog>
+
+<dialog id="installSheet">
+  <div class="sheet">
+    <h2>Ana ekrana ekle</h2>
+    <p class="lead">Bleep, uygulama gibi tam ekran açılır.</p>
+    <ol class="steps">
+      <li>Safari'nin alt çubuğundaki <b>Paylaş</b> simgesine dokun.</li>
+      <li><b>Ana Ekrana Ekle</b>'yi seç.</li>
+      <li><b>Ekle</b>'ye dokun.</li>
+    </ol>
+    <button class="btn ghost" id="closeInstall">Kapat</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const app = $("app"), pill = $("pill"), pillText = $("pillText");
+  const big = $("big"), bigIcon = $("bigIcon"), bigLabel = $("bigLabel"), bigSub = $("bigSub");
+  const sheet = $("sheet"), deviceList = $("deviceList"), manual = $("manual"), sheetMsg = $("sheetMsg");
+  const vol = $("vol"), volVal = $("volVal"), boost = $("boost"), pitch = $("pitch"), pitchVal = $("pitchVal");
+
+  let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
+  let connected = false;
+  let ctx = null, osc = null, drive = null, out = null, routeEl = null, playing = false;
+
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const canSelectOutput = !!(navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput);
+  const canSetSink = "setSinkId" in HTMLMediaElement.prototype ||
+    (window.AudioContext && "setSinkId" in AudioContext.prototype);
+  // Cihaz adından kulaklık tahmini; eşleşenler listede üste çıkar ve vurgulanır.
+  const HEADSET = /airpods|beats|buds|pods|headphone|headset|earphone|earbud|kulakl|bose|jabra|sennheiser|wh-|wf-|jbl|soundcore/i;
+  const canEnumerate = !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) && canSetSink;
+
+  function render() {
+    app.classList.toggle("ready", connected && !playing);
+    app.classList.toggle("playing", playing);
+    if (!connected) {
+      bigIcon.textContent = "🎧"; bigLabel.textContent = "Önce bağlan"; bigSub.textContent = "Kulaklığını seçmek için dokun";
+    } else if (playing) {
+      bigIcon.textContent = "■"; bigLabel.textContent = "Durdur"; bigSub.textContent = "Sese doğru yürü";
+    } else {
+      bigIcon.textContent = "▶"; bigLabel.textContent = "Çal"; bigSub.textContent = "Kesintisiz bip";
+    }
+  }
+
+  function markConnected(label) {
+    connected = true;
+    pill.classList.add("on");
+    pillText.textContent = label;
+    render();
+    if (sheet.open) sheet.close();
+  }
+
+  function showManual() {
+    manual.hidden = false;
+    $("sheetLead").textContent = "Bu tarayıcı ses çıkışını kendisi seçemiyor.";
+    manual.innerHTML = (isIOS
+      ? "<ol class='steps'><li>Kulaklığını aç (kutusu varsa kapağını aç) ve telefonun yanına getir.</li>" +
+        "<li>Denetim Merkezi'ni aç, müzik kartındaki AirPlay simgesine dokun.</li>" +
+        "<li>Listeden kulaklığını seç ve buraya geri dön.</li></ol>"
+      : "<ol class='steps'><li>Kulaklığını cihazının Bluetooth ayarlarından bağla.</li>" +
+        "<li>Ses çıkışı olarak kulaklığını seç ve buraya geri dön.</li></ol>");
+    const ok = document.createElement("button");
+    ok.className = "btn";
+    ok.textContent = "Kulaklığımı bağladım";
+    ok.onclick = () => markConnected("Sistem çıkışı");
+    manual.appendChild(ok);
+  }
+
+  async function listOutputs() {
+    // Cihaz adlarını görmek için tarayıcı mikrofon izni ister; mikrofon hemen kapatılır.
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+    } catch (e) { /* izin verilmezse adlar boş gelir */ }
+    const outs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audiooutput");
+    if (!outs.length || outs.every((d) => !d.label)) { showManual(); return; }
+    outs.sort((a, b) => HEADSET.test(b.label) - HEADSET.test(a.label));
+    for (const d of outs) {
+      const isHeadset = HEADSET.test(d.label);
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.className = "dev" + (isHeadset ? " headset" : "") + (d.deviceId === sinkId ? " sel" : "");
+      b.innerHTML = "<span></span><span>" + (isHeadset ? "🎧" : "") + "</span>";
+      b.firstChild.textContent = d.label || "Bilinmeyen cihaz";
+      b.onclick = () => { sinkId = d.deviceId; markConnected(d.label || "Seçilen cihaz"); };
+      li.appendChild(b);
+      deviceList.appendChild(li);
+    }
+    sheetMsg.textContent = outs.some((d) => HEADSET.test(d.label))
+      ? "" : "Listede kulaklık görünmüyor. Önce Bluetooth ayarlarından bağla, sonra tekrar aç.";
+  }
+
+  async function openPicker() {
+    if (playing) stopAudio();
+    deviceList.innerHTML = ""; manual.innerHTML = ""; manual.hidden = true; sheetMsg.textContent = "";
+    $("sheetLead").textContent = "Kulaklığın Bluetooth ile bağlı olmalı.";
+    try {
+      if (canSelectOutput) {
+        // Tarayıcının kendi seçim penceresi; kullanıcı dokunuşu içinde çağrılmalı.
+        const d = await navigator.mediaDevices.selectAudioOutput();
+        sinkId = d.deviceId;
+        markConnected(d.label || "Seçilen cihaz");
+        return;
+      }
+      sheet.showModal();
+      if (canEnumerate) await listOutputs(); else showManual();
+    } catch (e) {
+      if (!sheet.open) sheet.showModal();
+      sheetMsg.textContent = "Cihaz seçilmedi.";
+      showManual();
+    }
+  }
+
+  pill.onclick = openPicker;
+  $("closeSheet").onclick = () => sheet.close();
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
+
+  // ---- Ses ----
+  // 0-100: temiz ses, seviye düşer. 100-200: boost; sinyal 8 kata kadar sürülüp
+  // kırpılır, kare dalgaya yaklaşır (aynı tepe seviyede daha yüksek enerji).
+  function levels() {
+    const v = Number(vol.value);
+    return v <= 100
+      ? { drive: 1, out: Math.pow(v / 100, 2) * 0.98 }
+      : { drive: 1 + (v - 100) / 100 * 7, out: 0.95 };
+  }
+  vol.oninput = () => {
+    volVal.textContent = vol.value + "%";
+    boost.hidden = vol.value <= 100;
+    if (!ctx) return;
+    const l = levels();
+    drive.gain.setTargetAtTime(l.drive, ctx.currentTime, 0.02);
+    out.gain.setTargetAtTime(l.out, ctx.currentTime, 0.02);
+  };
+  pitch.oninput = () => {
+    pitchVal.textContent = (pitch.value / 1000).toFixed(1) + " kHz";
+    if (osc) osc.frequency.setTargetAtTime(Number(pitch.value), ctx.currentTime, 0.02);
+  };
+
+  async function startAudio() {
+    // iOS: sessiz anahtarı açıkken de çalsın
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const l = levels();
+    osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = Number(pitch.value);
+    drive = ctx.createGain();
+    drive.gain.value = l.drive;
+    // Doğrusal eğri: [-1, 1] dışı değerler WaveShaper tarafından ±1'e kırpılır.
+    const clip = ctx.createWaveShaper();
+    clip.curve = new Float32Array([-1, 1]);
+    clip.oversample = "4x";
+    out = ctx.createGain();
+    out.gain.value = l.out;
+    osc.connect(drive).connect(clip).connect(out);
+
+    if (sinkId && "setSinkId" in AudioContext.prototype) {
+      await ctx.setSinkId(sinkId);
+      out.connect(ctx.destination);
+    } else if (sinkId && "setSinkId" in HTMLMediaElement.prototype) {
+      const dest = ctx.createMediaStreamDestination();
+      out.connect(dest);
+      routeEl = new Audio();
+      routeEl.srcObject = dest.stream;
+      await routeEl.setSinkId(sinkId);
+      await routeEl.play();
+    } else {
+      out.connect(ctx.destination);
+    }
+    await ctx.resume();
+    osc.start();   // Durdur'a basılana kadar kesintisiz bip
+    playing = true;
+  }
+
+  function stopAudio() {
+    playing = false;
+    if (routeEl) { routeEl.pause(); routeEl.srcObject = null; routeEl = null; }
+    if (ctx) { ctx.close(); ctx = null; osc = null; drive = null; out = null; }
+    render();
+  }
+
+  big.onclick = async () => {
+    if (!connected) { openPicker(); return; }
+    if (playing) { stopAudio(); return; }
+    try {
+      await startAudio();
+      render();
+    } catch (e) {
+      stopAudio();
+      bigSub.textContent = "Çalınamadı: " + (e && e.message ? e.message : e);
+    }
+  };
+
+  render();
+
+  // ---- Web App ----
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+  const installBtn = $("installBtn"), installSheet = $("installSheet");
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let deferredPrompt = null;
+  // Chrome / Edge / Android: tarayıcının kendi yükleme penceresi
+  addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.hidden = false;
+  });
+  addEventListener("appinstalled", () => { installBtn.hidden = true; });
+  // iOS Safari'de yükleme API'si yok; adımları göster
+  if (isIOS && !standalone) installBtn.hidden = false;
+  installBtn.onclick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.hidden = true;
+    } else {
+      installSheet.showModal();
+    }
+  };
+  $("closeInstall").onclick = () => installSheet.close();
+  installSheet.addEventListener("click", (e) => { if (e.target === installSheet) installSheet.close(); });
+})();
+</script>
+</body>
+</html>
