@@ -43,7 +43,7 @@ Telefon öncelikli, tek ekran. Her şey alt alta dizilmiş bir form gibi değil:
    - `enumerateDevices()` ile `audiooutput` türündeki cihazları alttan açılan bir panelde (`<dialog>`) listele.
    - Adı şu desene uyan cihazları listenin üstüne al, kenarlığını vurgula ve yanına 🎧 koy: `/airpods|beats|buds|pods|headphone|headset|earphone|earbud|kulakl|bose|jabra|sennheiser|wh-|wf-|jbl|soundcore/i`.
    - Listede bu desene uyan cihaz yoksa "Listede kulaklık görünmüyor…" mesajını göster.
-3. **İkisi de yoksa (iOS Safari):** Seçim yapılamaz. Panelde adımları göster: kulaklığı aç, Denetim Merkezi'ndeki AirPlay simgesinden kulaklığı seç, geri dön. Altına "Kulaklığımı bağladım" butonu koy. Bu butona basınca uygulama sistemin varsayılan ses çıkışını kullanır.
+3. **İkisi de yoksa (iOS Safari):** Seçim yapılamaz. Panelde adımları göster: kulaklığı aç, Denetim Merkezi'ndeki AirPlay simgesinden kulaklığı seç, geri dön. Tarayıcı bu yolda bağlı kulaklığın adını vermediği için kullanıcıdan ad al: daha önce kullanılan adlar tek dokunuşluk düğmeler olarak (en son bağlanan önde), altında "ör. AirPods Pro" yer tutuculu bir ad alanı (en fazla 40 karakter) ve "Kulaklığımı bağladım" butonu. Ad boşsa "Kulaklığım" kullanılır. Bağlanınca uygulama sistemin varsayılan ses çıkışını kullanır; ad, konum geçmişini cihaza göre gruplamak içindir.
 
 Bağlantı onaylanınca: cihaz göstergesi güncellenir, panel kapanır ve büyük buton "Hazır" durumuna geçer.
 
@@ -88,8 +88,9 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
    yakalayamaz. Konum yalnızca sayfa **açık ve ön plandayken**, cihaz seçildiği an
    alınır. Bu, "canlı takip" değil; uygulamayı her açıp bağlandığında "son konumu
    güncelleme"dir (Apple'ın "Find My → son görülen konum"una benzer, yerine geçmez).
-2. **Sunucu yoktur, konum yalnızca bu cihazdadır.** Koordinat `localStorage`'da
-   (`bleep.lastSeen`) tutulur, hiçbir sunucuya gönderilmez, başka cihazdan görülemez.
+2. **Sunucu yoktur, konum yalnızca bu cihazdadır.** Geçmiş `localStorage`'da
+   (`bleep.history`) tutulur, hiçbir sunucuya gönderilmez, başka cihazdan görülemez.
+   Eski tek kayıtlık `bleep.lastSeen` varsa açılışta "Önceki kayıt" cihazına taşınır.
 3. **Konum izni gerekir.** `navigator.geolocation.getCurrentPosition` güvenli bağlam
    (HTTPS/localhost) ve kullanıcı izni ister. İlk bağlanmada tarayıcı izin sorar;
    bu izin ekranı kullanıcı onayı yerine geçer. İzin reddedilirse ses/çalma akışı
@@ -97,13 +98,22 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
 
 **Davranış:**
 - Kulaklık bağlandığında (`markConnected`), fire-and-forget biçimde konum alınır;
-  başarılıysa `{lat, lng, acc, t}` kaydedilir ve kartta harita gösterilir.
+  başarılıysa `{lat, lng, acc, t}` bağlanan cihazın adı altında geçmişin başına
+  eklenir (ad küçük harfe çevrilip boşlukları kırpılarak anahtar yapılır; cihaz başına
+  en fazla 50 kayıt, eskiler silinir) ve kart o cihaza geçer.
 - Kart her zaman görünür. Kayıt yokken harita yerine boş durum metni yazar:
   "Kulaklığını bağladığında son konumu burada görünecek." Böylece kullanıcı
   özelliğin varlığını ilk açılışta görür.
-- Kayıt varken: başlık "Son görüldüğü yer", gömülü harita, altında "az önce / N dk önce"
-  türü göreli zaman + "±N m" doğruluk, ve cihazın kendi harita uygulamasında açan
-  "Haritada aç" linki (OpenStreetMap, zoom 17).
+- Kayıt varken, yukarıdan aşağıya:
+  - Cihaz seçici (`<select>`): "Ad · N kayıt", en son konum alınan cihaz önde.
+    Açılışta en son seçilen cihaz (`bleep.lastDevice`) gelir.
+  - Gömülü harita: seçili cihazın tüm kayıtları marker olarak; seçili kayıt tam
+    opak ve üstte, diğerleri soluk. Marker'a dokunmak o kaydı seçer.
+  - Meta satırı: seçili kaydın zaman damgası ("25.10.2026 14:17") + "±N m" doğruluk,
+    ve cihazın kendi harita uygulamasında açan "Haritada aç" linki (OpenStreetMap, zoom 17).
+  - Zaman damgalı liste (en yeni önde): her satırda tarih-saat + doğruluk ve sağda
+    göreli süre ("az önce / N dk önce / N sa önce / N gün önce"). Satıra dokunmak
+    haritayı o kayda götürür. Liste en fazla 200px yüksekliğinde, kendi içinde kayar.
 - Harita **Leaflet 1.9.4** ile çizilir; dosyalar `web/vendor/leaflet/`'e gömülüdür
   (dış bağımlılık/CDN yok, service worker önbelleğe alır). Karolar OpenStreetMap'ten
   gelir (API anahtarı gerekmez). Çevrimdışıyken kütüphane önbellekten yüklenir, yalnız
@@ -133,4 +143,4 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
 - Telefon ve masaüstü, açık ve koyu temada konsolda hata yok.
 - Chrome'un yüklenebilirlik kontrolü hata vermez. Sayfa internet yokken de açılır.
 - Hiçbir metin uygulamanın Bluetooth ile kendisi bağlandığını, sistem sesini yükselttiğini ya da kutusundaki kulaklığı bulabildiğini iddia etmez.
-- "Son görüldüğü yer" kartı ilk açılışta boş durum metniyle görünür. Kulaklık bağlanınca konum izni verilirse kartta harita açılır; izin reddedilirse akış bozulmadan devam eder ve kart boş durumda kalır. Hiçbir metin konumun arka planda ya da sunucuya gönderilerek takip edildiğini iddia etmez.
+- "Son görüldüğü yer" kartı ilk açılışta boş durum metniyle görünür. Kulaklık bağlanınca konum izni verilirse kayıt o cihazın geçmişine eklenir ve kartta harita açılır; seçiciden başka bir cihaz seçilince harita ve zaman damgalı liste o cihazın geçmişine geçer. İzin reddedilirse akış bozulmadan devam eder ve kart boş durumda kalır. Hiçbir metin konumun arka planda ya da sunucuya gönderilerek takip edildiğini iddia etmez.

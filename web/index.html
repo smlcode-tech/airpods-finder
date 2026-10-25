@@ -139,6 +139,30 @@
   .seen .seenEmpty { margin: 0; font-size: 14px; color: var(--muted); }
   /* .seenMeta'nın display:flex kuralı hidden özniteliğini ezmesin */
   .seen [hidden] { display: none; }
+  /* Cihaz seçici: geçmişi olan kulaklıklar arasında geçiş; dokunma hedefi ≥44px */
+  .seen .seenDevice {
+    width: 100%; min-height: 44px; margin: 0 0 10px; padding: 8px 12px;
+    font: inherit; font-size: 15px; font-weight: 600; color: var(--text);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
+  }
+  /* Zaman damgalı kayıt listesi: 50 kayda kadar uzayabildiği için kendi içinde kayar */
+  .seen .seenList {
+    list-style: none; margin: 10px 0 0; padding: 0; max-height: 200px; overflow-y: auto;
+    display: grid; gap: 6px;
+  }
+  .seen .seenList button {
+    width: 100%; display: flex; justify-content: space-between; gap: 10px; text-align: left;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .seen .seenList button span:last-child { color: var(--muted); white-space: nowrap; }
+  .seen .seenList button.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  /* Manuel bağlanmada (iOS) kulaklığa ad verme alanı */
+  .nameInput {
+    width: 100%; min-height: 44px; margin-top: 8px; padding: 10px 12px; font: inherit;
+    color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .nameLabel { display: block; margin-top: 12px; font-size: 14px; color: var(--muted); }
   /* Leaflet bağlantı/zoom kontrolleri küçük ekranda sade dursun */
   .leaflet-control-attribution { font-size: 10px; }
 
@@ -219,11 +243,13 @@
     <div class="tile seen" id="seen">
       <div class="k">Son görüldüğü yer</div>
       <p class="seenEmpty" id="seenEmpty">Kulaklığını bağladığında son konumu burada görünecek.</p>
+      <select class="seenDevice" id="seenDevice" aria-label="Kulaklık seç" hidden></select>
       <div id="map" hidden></div>
       <div class="seenMeta" id="seenMeta" hidden>
         <span id="seenWhen"></span>
         <a class="seenOpen" id="seenOpen" target="_blank" rel="noopener">Haritada aç</a>
       </div>
+      <ol class="seenList" id="seenList" aria-label="Konum geçmişi" hidden></ol>
     </div>
     <div class="note">
       <span>⚠️</span>
@@ -264,6 +290,7 @@
   const sheet = $("sheet"), deviceList = $("deviceList"), manual = $("manual"), sheetMsg = $("sheetMsg");
   const vol = $("vol"), volVal = $("volVal"), boost = $("boost"), pitch = $("pitch"), pitchVal = $("pitchVal");
   const seenEmpty = $("seenEmpty"), seenMeta = $("seenMeta"), seenWhen = $("seenWhen"), seenOpen = $("seenOpen");
+  const seenDevice = $("seenDevice"), seenList = $("seenList");
 
   let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
   let connected = false;
@@ -299,7 +326,8 @@
     // Kulaklık bağlandı: telefon ile kulaklık aynı yerde olduğundan telefonun
     // konumu = kulaklığın "son görüldüğü yer"idir. Fire-and-forget: konum izni
     // reddedilse ya da gecikse bile bağlanma/çalma akışı beklemez, bozulmaz.
-    captureLocation();
+    // Kayıt bu cihaz adı altında gruplanır (geçmiş seçicisi buna göre çalışır).
+    captureLocation(label);
   }
 
   function showManual() {
@@ -311,11 +339,43 @@
         "<li>Listeden kulaklığını seç ve buraya geri dön.</li></ol>"
       : "<ol class='steps'><li>Kulaklığını cihazının Bluetooth ayarlarından bağla.</li>" +
         "<li>Ses çıkışı olarak kulaklığını seç ve buraya geri dön.</li></ol>");
+    // Bu yolda (iOS vb.) tarayıcı bağlı kulaklığın adını vermez; konum geçmişini cihaza
+    // göre ayırabilmek için adı kullanıcıdan alırız. Önceki adlar tek dokunuşluk düğmedir.
+    const names = deviceNames();
+    if (names.length) {
+      const lbl = document.createElement("span");
+      lbl.className = "nameLabel";
+      lbl.textContent = "Hangi kulaklığı bağladın?";
+      const ul = document.createElement("ul");
+      ul.className = "devices";
+      ul.style.marginTop = "8px";
+      for (const n of names) {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.className = "dev headset";
+        b.innerHTML = "<span></span><span>🎧</span>";
+        b.firstChild.textContent = n;   // textContent: kullanıcı girdisi HTML olarak yorumlanmasın
+        b.onclick = () => markConnected(n);
+        li.appendChild(b);
+        ul.appendChild(li);
+      }
+      manual.append(lbl, ul);
+    }
+    const lbl2 = document.createElement("label");
+    lbl2.className = "nameLabel";
+    lbl2.htmlFor = "nameInput";
+    lbl2.textContent = names.length ? "Başka bir kulaklık" : "Kulaklığına bir ad ver";
+    const input = document.createElement("input");
+    input.className = "nameInput";
+    input.id = "nameInput";
+    input.maxLength = 40;
+    input.placeholder = "ör. AirPods Pro";
+    input.autocomplete = "off";
     const ok = document.createElement("button");
     ok.className = "btn";
     ok.textContent = "Kulaklığımı bağladım";
-    ok.onclick = () => markConnected("Sistem çıkışı");
-    manual.appendChild(ok);
+    ok.onclick = () => markConnected(input.value.trim() || "Kulaklığım");
+    manual.append(lbl2, input, ok);
   }
 
   async function listOutputs() {
@@ -446,11 +506,17 @@
 
   render();
 
-  // ---- Son görüldüğü yer (konum) ----
+  // ---- Son görüldüğü yer (konum geçmişi, cihaza göre) ----
   // Konum YALNIZCA sayfa açıkken, kullanıcı izniyle alınır; bu cihazda localStorage'da
   // tutulur, sunucuya gönderilmez. Arka plan takibi yoktur (web platformu izin vermez).
-  const SEEN_KEY = "bleep.lastSeen";
-  let lmap = null, lmarker = null, seenIcon = null;   // Leaflet örnekleri; ilk gösterimde kurulur
+  // Kayıtlar bağlanan kulaklığın adına göre gruplanır; kart bir seçiciyle cihazlar
+  // arasında geçiş yapar ve seçili cihazın zaman damgalı geçmişini listeler.
+  const HIST_KEY = "bleep.history";       // { v:1, devices: { [key]: { name, records:[{lat,lng,acc,t}] } } }
+  const OLD_KEY = "bleep.lastSeen";       // eski tek kayıtlık biçim; açılışta geçmişe taşınır
+  const LAST_DEV_KEY = "bleep.lastDevice";
+  const MAX_PER_DEVICE = 50;              // depolama kotasını zorlamamak için cihaz başına üst sınır
+  let lmap = null, lmarkers = [], lgroup = null, seenIcon = null;   // Leaflet örnekleri; ilk gösterimde kurulur
+  let curKey = null;                      // kartta gösterilen cihaz
 
   // Gömülü marker görsellerine açık yol veren ikonu tembel üretir: Leaflet'in otomatik
   // yol tahminine güvenmeyiz (vendor/ altında kırılgan). Tembel, çünkü leaflet.js `defer`
@@ -464,16 +530,57 @@
     });
   }
 
-  function saveSeen(rec) {
-    try { localStorage.setItem(SEEN_KEY, JSON.stringify(rec)); } catch (e) { /* kota/gizli mod: sessiz */ }
+  // Aynı kulaklığın "AirPods Pro" / "airpods pro " gibi yazımları tek grupta toplansın.
+  function devKey(name) { return name.trim().toLowerCase(); }
+
+  function saveHist(h) {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(h)); return true; }
+    catch (e) { return false; /* kota/gizli mod: sessiz */ }
   }
 
-  function loadSeen() {
-    // Açılışta önceki kaydı geri getir (kalıcılık yalnız bu cihazda).
+  // Kaydı cihazın listesinin başına ekler (en yeni önde) ve sınırı aşan eskileri atar.
+  function pushRecord(h, name, rec) {
+    const key = devKey(name);
+    const d = h.devices[key] || (h.devices[key] = { name, records: [] });
+    d.name = name;   // görünen ad en son kullanılan yazımı izlesin
+    d.records.unshift(rec);
+    d.records.splice(MAX_PER_DEVICE);
+    return key;
+  }
+
+  // Geçmişi okur; bozuksa boş yapı döner. Eski `bleep.lastSeen` kaydı varsa
+  // kaybolmasın diye "Önceki kayıt" cihazına taşınır (bir kez, sonra silinir).
+  function loadHist() {
+    let h = null;
+    try { h = JSON.parse(localStorage.getItem(HIST_KEY)); } catch (e) { /* bozuk kayıt: yok say */ }
+    if (!h || typeof h !== "object" || !h.devices) h = { v: 1, devices: {} };
     try {
-      const raw = localStorage.getItem(SEEN_KEY);
-      if (raw) renderSeen(JSON.parse(raw));
-    } catch (e) { /* bozuk kayıt: yok say */ }
+      const old = localStorage.getItem(OLD_KEY);
+      if (old) {
+        const r = JSON.parse(old);
+        if (r && typeof r.lat === "number") pushRecord(h, "Önceki kayıt", r);
+        // Önce yeni biçimi yaz, ancak başarılıysa eskiyi sil: yazma düşerse veri kaybolmaz.
+        if (saveHist(h)) localStorage.removeItem(OLD_KEY);
+      }
+    } catch (e) { /* bozuk eski kayıt: yok say */ }
+    return h;
+  }
+
+  // Cihaz anahtarları, en son konum alınan önde (seçici ve iOS ad düğmeleri bu sırayı kullanır).
+  function sortedKeys(h) {
+    return Object.keys(h.devices)
+      .filter((k) => h.devices[k].records && h.devices[k].records.length)
+      .sort((a, b) => h.devices[b].records[0].t - h.devices[a].records[0].t);
+  }
+
+  // Manuel bağlanma adımında gösterilecek önceki kulaklık adları.
+  function deviceNames() {
+    const h = loadHist();
+    return sortedKeys(h).map((k) => h.devices[k].name).filter((n) => n !== "Önceki kayıt");
+  }
+
+  function setLastDev(key) {
+    try { localStorage.setItem(LAST_DEV_KEY, key); } catch (e) { /* sessiz */ }
   }
 
   function relTime(ts) {
@@ -482,17 +589,26 @@
     if (s < 60) return "az önce";
     if (s < 3600) return Math.floor(s / 60) + " dk önce";
     if (s < 86400) return Math.floor(s / 3600) + " sa önce";
-    return new Date(ts).toLocaleDateString("tr-TR");
+    return Math.floor(s / 86400) + " gün önce";
   }
 
-  function captureLocation() {
+  // Mutlak zaman damgası ("25.10.2026 14:17"); geçmişte kayıtları ayırt etmenin asıl yolu.
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleString("tr-TR", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  function captureLocation(label) {
     if (!navigator.geolocation) return;   // destek yoksa sessiz çık
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const c = pos.coords;
-        const rec = { lat: c.latitude, lng: c.longitude, acc: c.accuracy, t: Date.now() };
-        saveSeen(rec);
-        renderSeen(rec);
+        const h = loadHist();
+        const key = pushRecord(h, label, { lat: c.latitude, lng: c.longitude, acc: c.accuracy, t: Date.now() });
+        saveHist(h);
+        setLastDev(key);
+        renderSeen(key);
       },
       () => { /* izin reddi / zaman aşımı: akışı bozma, sessiz geç */ },
       // enableHighAccuracy: GPS'i zorlar (daha isabetli). maximumAge 60000: son 1 dk
@@ -501,38 +617,91 @@
     );
   }
 
-  function renderSeen(rec) {
-    // Boş durum metni yerine harita ve meta satırını göster (kart kendisi hep görünür).
+  // Kartı verilen cihaz için kurar: seçici, zaman damgalı liste ve haritadaki tüm
+  // marker'lar. Cihaz yoksa (silinmiş/ilk açılış) en son kullanılana düşer.
+  function renderSeen(key) {
+    const h = loadHist();
+    const keys = sortedKeys(h);
+    if (!keys.length) return;             // kayıt yok: boş durum metni yerinde kalır
+    if (!h.devices[key] || !h.devices[key].records.length) key = keys[0];
+    curKey = key;
+    const recs = h.devices[key].records;
+
     seenEmpty.hidden = true;
-    $("map").hidden = false;
-    seenMeta.hidden = false;
-    // Cihazın kendi harita uygulamasında açmak için OSM linki (zoom 17).
-    seenOpen.href = "https://www.openstreetmap.org/?mlat=" + rec.lat + "&mlon=" + rec.lng +
-                    "#map=17/" + rec.lat + "/" + rec.lng;
-    const acc = rec.acc ? " · ±" + Math.round(rec.acc) + " m" : "";
-    seenWhen.textContent = relTime(rec.t) + acc;
+    seenDevice.hidden = false; $("map").hidden = false; seenMeta.hidden = false; seenList.hidden = false;
+
+    seenDevice.innerHTML = "";
+    for (const k of keys) {
+      // new Option metni textContent olarak atar: kullanıcı adı HTML olarak yorumlanmaz.
+      seenDevice.add(new Option(h.devices[k].name + " · " + h.devices[k].records.length + " kayıt", k));
+    }
+    seenDevice.value = key;
+
+    seenList.innerHTML = "";
+    recs.forEach((r, i) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.innerHTML = "<span></span><span></span>";
+      b.firstChild.textContent = fmtTime(r.t) + (r.acc ? " · ±" + Math.round(r.acc) + " m" : "");
+      b.lastChild.textContent = relTime(r.t);
+      b.onclick = () => selectRecord(recs, i);
+      li.appendChild(b);
+      seenList.appendChild(li);
+    });
+
+    if (typeof L !== "undefined") {
+      if (!lmap) {
+        lmap = L.map("map", { attributionControl: true });
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19, attribution: "© OpenStreetMap",
+        }).addTo(lmap);
+        lgroup = L.layerGroup().addTo(lmap);
+      }
+      if (!seenIcon) seenIcon = makeIcon();   // L hazırken üret
+      lgroup.clearLayers();
+      // Ters sırada ekle: en yeni kayıt en son eklenir, üst üste binince üstte kalır.
+      lmarkers = recs.map((r) => L.marker([r.lat, r.lng], { icon: seenIcon }));
+      for (let i = lmarkers.length - 1; i >= 0; i--) {
+        lmarkers[i].on("click", () => selectRecord(recs, i)).addTo(lgroup);
+      }
+      // Kart `hidden`'dan görünüre geçince konteyner boyutu 0'dan gelebilir; Leaflet'in
+      // karoları doğru yerleştirmesi için boyutu yeniden hesaplat.
+      setTimeout(() => lmap.invalidateSize(), 0);
+    }
+    selectRecord(recs, 0);
+    seenList.scrollTop = 0;
+  }
+
+  // Tek kaydı öne çıkarır: liste satırı vurgulanır, harita oraya gider, diğer
+  // marker'lar soluklaşır; meta satırı ve "Haritada aç" linki bu kayda göre güncellenir.
+  function selectRecord(recs, i) {
+    const r = recs[i];
+    [...seenList.children].forEach((li, j) => li.firstChild.classList.toggle("sel", j === i));
+    seenOpen.href = "https://www.openstreetmap.org/?mlat=" + r.lat + "&mlon=" + r.lng +
+                    "#map=17/" + r.lat + "/" + r.lng;
+    seenWhen.textContent = fmtTime(r.t) + (r.acc ? " · ±" + Math.round(r.acc) + " m" : "");
 
     // Leaflet yüklenemediyse (gömülü dosya eksik): harita yerine koordinat metni; link yine çalışır.
     if (typeof L === "undefined") {
       const m = $("map");
       m.style.display = "grid"; m.style.placeItems = "center"; m.style.color = "var(--muted)";
-      m.textContent = rec.lat.toFixed(5) + ", " + rec.lng.toFixed(5);
+      m.textContent = r.lat.toFixed(5) + ", " + r.lng.toFixed(5);
       return;
     }
+    lmarkers.forEach((mk, j) => {
+      mk.setOpacity(j === i ? 1 : 0.4);
+      mk.setZIndexOffset(j === i ? 1000 : 0);   // seçili kayıt diğerlerinin altında kalmasın
+    });
+    lmap.setView([r.lat, r.lng], 17);
+  }
 
-    if (!lmap) {
-      lmap = L.map("map", { attributionControl: true });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19, attribution: "© OpenStreetMap",
-      }).addTo(lmap);
-    }
-    lmap.setView([rec.lat, rec.lng], 17);
-    if (!seenIcon) seenIcon = makeIcon();   // L hazırken üret
-    if (lmarker) lmarker.setLatLng([rec.lat, rec.lng]);
-    else lmarker = L.marker([rec.lat, rec.lng], { icon: seenIcon }).addTo(lmap);
-    // Kart `hidden`'dan görünüre geçince konteyner boyutu 0'dan gelebilir; Leaflet'in
-    // karoları doğru yerleştirmesi için boyutu yeniden hesaplat.
-    setTimeout(() => lmap.invalidateSize(), 0);
+  seenDevice.onchange = () => { setLastDev(seenDevice.value); renderSeen(seenDevice.value); };
+
+  function loadSeen() {
+    // Açılışta en son kullanılan cihazın geçmişini geri getir (kalıcılık yalnız bu cihazda).
+    let last = null;
+    try { last = localStorage.getItem(LAST_DEV_KEY); } catch (e) { /* sessiz */ }
+    renderSeen(last);
   }
 
   // loadSeen'i DOMContentLoaded'a ertele: `defer`'li leaflet.js bu inline scriptten
