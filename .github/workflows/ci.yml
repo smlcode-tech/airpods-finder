@@ -1,0 +1,57 @@
+# Her PR'da ve main'e her push'ta çalışır. Uygulamanın build adımı yoktur;
+# CI'ın görevi Vercel'e çıkacak dosyaların gerçekten çalıştığını doğrulamaktır.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Aynı PR'a art arda push gelirse eski koşuyu iptal et: kuyruk ve dakika israfı olmasın.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Saniyeler süren sözdizimi kontrolleri: bozuk bir dosya e2e'yi beklemeden yakalansın.
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python sözdizimi
+        run: python -m py_compile airpods_ring.py
+      - name: Service worker sözdizimi
+        run: node --check web/sw.js
+      - name: Manifest JSON
+        run: python -m json.tool web/manifest.webmanifest > /dev/null
+
+  # Gerçek tarayıcıda uçtan uca test: bağlanma akışı ve cihaza göre konum geçmişi.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # Sürüm package.json'da sabit; tarayıcı da o sürüme uygun olanı indirilir.
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      # Kırmızıda hata ayıklamak için iz ve ekran görüntülerini sakla.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
