@@ -1,5 +1,5 @@
 // Uygulama kabuğunu önbelleğe alır; internet yokken de açılır.
-const CACHE = "bleep-v7";
+const CACHE = "bleep-v8";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest",
   // İkon adresleri index.html ve manifest'teki ?v= sürümüyle birebir aynı olmalı; yoksa çevrimdışıyken önbellekten bulunamaz.

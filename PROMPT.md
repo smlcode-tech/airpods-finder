@@ -93,12 +93,15 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
 3. **Konum izni gerekir.** `navigator.geolocation.getCurrentPosition` güvenli bağlam
    (HTTPS/localhost) ve kullanıcı izni ister. İlk bağlanmada tarayıcı izin sorar;
    bu izin ekranı kullanıcı onayı yerine geçer. İzin reddedilirse ses/çalma akışı
-   bozulmaz, kart gösterilmez (fire-and-forget, sessiz degrade).
+   bozulmaz, kart boş durumda kalır (fire-and-forget, sessiz degrade).
 
 **Davranış:**
 - Kulaklık bağlandığında (`markConnected`), fire-and-forget biçimde konum alınır;
-  başarılıysa `{lat, lng, acc, t}` kaydedilir ve "Son görüldüğü yer" kartı açılır.
-- Kart: başlık "Son görüldüğü yer", gömülü harita, altında "az önce / N dk önce"
+  başarılıysa `{lat, lng, acc, t}` kaydedilir ve kartta harita gösterilir.
+- Kart her zaman görünür. Kayıt yokken harita yerine boş durum metni yazar:
+  "Kulaklığını bağladığında son konumu burada görünecek." Böylece kullanıcı
+  özelliğin varlığını ilk açılışta görür.
+- Kayıt varken: başlık "Son görüldüğü yer", gömülü harita, altında "az önce / N dk önce"
   türü göreli zaman + "±N m" doğruluk, ve cihazın kendi harita uygulamasında açan
   "Haritada aç" linki (OpenStreetMap, zoom 17).
 - Harita **Leaflet 1.9.4** ile çizilir; dosyalar `web/vendor/leaflet/`'e gömülüdür
@@ -130,4 +133,4 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
 - Telefon ve masaüstü, açık ve koyu temada konsolda hata yok.
 - Chrome'un yüklenebilirlik kontrolü hata vermez. Sayfa internet yokken de açılır.
 - Hiçbir metin uygulamanın Bluetooth ile kendisi bağlandığını, sistem sesini yükselttiğini ya da kutusundaki kulaklığı bulabildiğini iddia etmez.
-- Kulaklık bağlanınca konum izni verilirse "Son görüldüğü yer" kartı haritayla açılır; izin reddedilirse akış bozulmadan sessizce devam eder. Hiçbir metin konumun arka planda ya da sunucuya gönderilerek takip edildiğini iddia etmez.
+- "Son görüldüğü yer" kartı ilk açılışta boş durum metniyle görünür. Kulaklık bağlanınca konum izni verilirse kartta harita açılır; izin reddedilirse akış bozulmadan devam eder ve kart boş durumda kalır. Hiçbir metin konumun arka planda ya da sunucuya gönderilerek takip edildiğini iddia etmez.

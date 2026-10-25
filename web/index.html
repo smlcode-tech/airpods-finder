@@ -135,6 +135,10 @@
     flex: none; text-decoration: none; font-weight: 600; color: var(--ink);
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px;
   }
+  /* Kayıt yokken haritanın yerinde duran boş durum metni; özelliğin varlığını baştan gösterir */
+  .seen .seenEmpty { margin: 0; font-size: 14px; color: var(--muted); }
+  /* .seenMeta'nın display:flex kuralı hidden özniteliğini ezmesin */
+  .seen [hidden] { display: none; }
   /* Leaflet bağlantı/zoom kontrolleri küçük ekranda sade dursun */
   .leaflet-control-attribution { font-size: 10px; }
 
@@ -212,10 +216,11 @@
       <div class="v" id="pitchVal">1.0 kHz</div>
       <input type="range" id="pitch" min="500" max="4000" step="50" value="1000" aria-label="Ton yüksekliği">
     </div>
-    <div class="tile seen" id="seen" hidden>
+    <div class="tile seen" id="seen">
       <div class="k">Son görüldüğü yer</div>
-      <div id="map"></div>
-      <div class="seenMeta">
+      <p class="seenEmpty" id="seenEmpty">Kulaklığını bağladığında son konumu burada görünecek.</p>
+      <div id="map" hidden></div>
+      <div class="seenMeta" id="seenMeta" hidden>
         <span id="seenWhen"></span>
         <a class="seenOpen" id="seenOpen" target="_blank" rel="noopener">Haritada aç</a>
       </div>
@@ -258,7 +263,7 @@
   const big = $("big"), bigIcon = $("bigIcon"), bigLabel = $("bigLabel"), bigSub = $("bigSub");
   const sheet = $("sheet"), deviceList = $("deviceList"), manual = $("manual"), sheetMsg = $("sheetMsg");
   const vol = $("vol"), volVal = $("volVal"), boost = $("boost"), pitch = $("pitch"), pitchVal = $("pitchVal");
-  const seen = $("seen"), seenWhen = $("seenWhen"), seenOpen = $("seenOpen");
+  const seenEmpty = $("seenEmpty"), seenMeta = $("seenMeta"), seenWhen = $("seenWhen"), seenOpen = $("seenOpen");
 
   let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
   let connected = false;
@@ -497,7 +502,10 @@
   }
 
   function renderSeen(rec) {
-    seen.hidden = false;
+    // Boş durum metni yerine harita ve meta satırını göster (kart kendisi hep görünür).
+    seenEmpty.hidden = true;
+    $("map").hidden = false;
+    seenMeta.hidden = false;
     // Cihazın kendi harita uygulamasında açmak için OSM linki (zoom 17).
     seenOpen.href = "https://www.openstreetmap.org/?mlat=" + rec.lat + "&mlon=" + rec.lng +
                     "#map=17/" + rec.lat + "/" + rec.lng;
