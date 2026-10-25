@@ -14,6 +14,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bleep">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Harita kütüphanesi (Leaflet 1.9.4) web/vendor/'a gömülü: dış bağımlılık/CDN yok,
+     service worker önbelleğe aldığından çevrimdışı da yüklenir. defer: sayfa açılışını geciktirmesin.
+     Yüklenemezse koddaki `typeof L` koruması koordinat+link fallback'ine düşer. -->
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=7">
+<script src="vendor/leaflet/leaflet.js?v=7" defer></script>
 <style>
   :root {
     /* İkonla aynı palet: sarı #ffd23f + mürekkep siyahı #111 */
@@ -114,6 +119,25 @@
   }
   .note b { color: var(--warn); }
 
+  /* "Son görüldüğü yer" kartı: tam genişlik, harita + meta + link */
+  .seen { grid-column: 1 / -1; }
+  .seen .k { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  /* Harita yüksekliği sabit; zemin --surface-2 ki karolar gelmeden (çevrimdışı) kart boş/kırık görünmesin */
+  #map {
+    height: 180px; border-radius: 12px; overflow: hidden;
+    background: var(--surface-2); border: 1px solid var(--line);
+  }
+  .seen .seenMeta {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 10px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .seen .seenOpen {
+    flex: none; text-decoration: none; font-weight: 600; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px;
+  }
+  /* Leaflet bağlantı/zoom kontrolleri küçük ekranda sade dursun */
+  .leaflet-control-attribution { font-size: 10px; }
+
   /* Geniş ekran: buton solda, kontroller sağda */
   @media (min-width: 820px) {
     .app { grid-template-columns: 1.2fr 1fr; grid-template-rows: auto 1fr; column-gap: 32px; }
@@ -188,6 +212,14 @@
       <div class="v" id="pitchVal">1.0 kHz</div>
       <input type="range" id="pitch" min="500" max="4000" step="50" value="1000" aria-label="Ton yüksekliği">
     </div>
+    <div class="tile seen" id="seen" hidden>
+      <div class="k">Son görüldüğü yer</div>
+      <div id="map"></div>
+      <div class="seenMeta">
+        <span id="seenWhen"></span>
+        <a class="seenOpen" id="seenOpen" target="_blank" rel="noopener">Haritada aç</a>
+      </div>
+    </div>
     <div class="note">
       <span>⚠️</span>
       <span><b>Takılı değilken çalmıyorsa</b> kulaklığının <b>kulak algılama</b> ayarını kapat (AirPods'ta: Otomatik Kulak Algılama). Kulaklık kulağındayken çalma; ses işitmene zarar verebilir.</span>
@@ -226,6 +258,7 @@
   const big = $("big"), bigIcon = $("bigIcon"), bigLabel = $("bigLabel"), bigSub = $("bigSub");
   const sheet = $("sheet"), deviceList = $("deviceList"), manual = $("manual"), sheetMsg = $("sheetMsg");
   const vol = $("vol"), volVal = $("volVal"), boost = $("boost"), pitch = $("pitch"), pitchVal = $("pitchVal");
+  const seen = $("seen"), seenWhen = $("seenWhen"), seenOpen = $("seenOpen");
 
   let sinkId = null;      // seçilen ses çıkışı (destekleyen tarayıcılarda)
   let connected = false;
@@ -258,6 +291,10 @@
     pillText.textContent = label;
     render();
     if (sheet.open) sheet.close();
+    // Kulaklık bağlandı: telefon ile kulaklık aynı yerde olduğundan telefonun
+    // konumu = kulaklığın "son görüldüğü yer"idir. Fire-and-forget: konum izni
+    // reddedilse ya da gecikse bile bağlanma/çalma akışı beklemez, bozulmaz.
+    captureLocation();
   }
 
   function showManual() {
@@ -403,6 +440,98 @@
   };
 
   render();
+
+  // ---- Son görüldüğü yer (konum) ----
+  // Konum YALNIZCA sayfa açıkken, kullanıcı izniyle alınır; bu cihazda localStorage'da
+  // tutulur, sunucuya gönderilmez. Arka plan takibi yoktur (web platformu izin vermez).
+  const SEEN_KEY = "bleep.lastSeen";
+  let lmap = null, lmarker = null, seenIcon = null;   // Leaflet örnekleri; ilk gösterimde kurulur
+
+  // Gömülü marker görsellerine açık yol veren ikonu tembel üretir: Leaflet'in otomatik
+  // yol tahminine güvenmeyiz (vendor/ altında kırılgan). Tembel, çünkü leaflet.js `defer`
+  // ile bu satırdan SONRA yüklenir; L'yi ancak kullanım anında (render) hazır sayarız.
+  function makeIcon() {
+    return L.icon({
+      iconUrl: "vendor/leaflet/images/marker-icon.png",
+      iconRetinaUrl: "vendor/leaflet/images/marker-icon-2x.png",
+      shadowUrl: "vendor/leaflet/images/marker-shadow.png",
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+    });
+  }
+
+  function saveSeen(rec) {
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify(rec)); } catch (e) { /* kota/gizli mod: sessiz */ }
+  }
+
+  function loadSeen() {
+    // Açılışta önceki kaydı geri getir (kalıcılık yalnız bu cihazda).
+    try {
+      const raw = localStorage.getItem(SEEN_KEY);
+      if (raw) renderSeen(JSON.parse(raw));
+    } catch (e) { /* bozuk kayıt: yok say */ }
+  }
+
+  function relTime(ts) {
+    // Geçen süreyi okunur Türkçe ifadeye çevirir.
+    const s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 60) return "az önce";
+    if (s < 3600) return Math.floor(s / 60) + " dk önce";
+    if (s < 86400) return Math.floor(s / 3600) + " sa önce";
+    return new Date(ts).toLocaleDateString("tr-TR");
+  }
+
+  function captureLocation() {
+    if (!navigator.geolocation) return;   // destek yoksa sessiz çık
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const c = pos.coords;
+        const rec = { lat: c.latitude, lng: c.longitude, acc: c.accuracy, t: Date.now() };
+        saveSeen(rec);
+        renderSeen(rec);
+      },
+      () => { /* izin reddi / zaman aşımı: akışı bozma, sessiz geç */ },
+      // enableHighAccuracy: GPS'i zorlar (daha isabetli). maximumAge 60000: son 1 dk
+      // içinde hazır bir konum varsa onu kullan, hızlı dönsün.
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  function renderSeen(rec) {
+    seen.hidden = false;
+    // Cihazın kendi harita uygulamasında açmak için OSM linki (zoom 17).
+    seenOpen.href = "https://www.openstreetmap.org/?mlat=" + rec.lat + "&mlon=" + rec.lng +
+                    "#map=17/" + rec.lat + "/" + rec.lng;
+    const acc = rec.acc ? " · ±" + Math.round(rec.acc) + " m" : "";
+    seenWhen.textContent = relTime(rec.t) + acc;
+
+    // Leaflet yüklenemediyse (gömülü dosya eksik): harita yerine koordinat metni; link yine çalışır.
+    if (typeof L === "undefined") {
+      const m = $("map");
+      m.style.display = "grid"; m.style.placeItems = "center"; m.style.color = "var(--muted)";
+      m.textContent = rec.lat.toFixed(5) + ", " + rec.lng.toFixed(5);
+      return;
+    }
+
+    if (!lmap) {
+      lmap = L.map("map", { attributionControl: true });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, attribution: "© OpenStreetMap",
+      }).addTo(lmap);
+    }
+    lmap.setView([rec.lat, rec.lng], 17);
+    if (!seenIcon) seenIcon = makeIcon();   // L hazırken üret
+    if (lmarker) lmarker.setLatLng([rec.lat, rec.lng]);
+    else lmarker = L.marker([rec.lat, rec.lng], { icon: seenIcon }).addTo(lmap);
+    // Kart `hidden`'dan görünüre geçince konteyner boyutu 0'dan gelebilir; Leaflet'in
+    // karoları doğru yerleştirmesi için boyutu yeniden hesaplat.
+    setTimeout(() => lmap.invalidateSize(), 0);
+  }
+
+  // loadSeen'i DOMContentLoaded'a ertele: `defer`'li leaflet.js bu inline scriptten
+  // sonra ama DOMContentLoaded'dan önce çalışır; böylece kayıtlı konum ilk açılışta
+  // metin fallback'ine değil gerçek haritaya düşer. (Leaflet hiç yüklenmezse yine fallback.)
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", loadSeen);
+  else loadSeen();
 
   // ---- Web App ----
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {

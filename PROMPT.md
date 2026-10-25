@@ -78,6 +78,35 @@ Bağlantı onaylanınca: cihaz göstergesi güncellenir, panel kapanır ve büy�
   - Chrome ve Android: `beforeinstallprompt` olayını yakala, buton tarayıcının kendi yükleme penceresini açsın.
   - iOS Safari'de, ana ekrandan açılmamışsa: buton, "Paylaş → Ana Ekrana Ekle → Ekle" adımlarını gösteren bir panel açsın.
 
+### Son görüldüğü yer (konum + harita)
+Kulaklık cihaza bağlandığında telefonun o anki konumu, kulaklığın "son görüldüğü
+yer"i olarak kaydedilir ve haritada gösterilir. Mantık: telefon ile kulaklık aynı
+yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
+
+**Uyulması zorunlu teknik gerçekler (aşma, aksini vaat etme):**
+1. **Arka plan takibi yoktur.** Web sayfası, kulaklık bağlanma anını arka planda
+   yakalayamaz. Konum yalnızca sayfa **açık ve ön plandayken**, cihaz seçildiği an
+   alınır. Bu, "canlı takip" değil; uygulamayı her açıp bağlandığında "son konumu
+   güncelleme"dir (Apple'ın "Find My → son görülen konum"una benzer, yerine geçmez).
+2. **Sunucu yoktur, konum yalnızca bu cihazdadır.** Koordinat `localStorage`'da
+   (`bleep.lastSeen`) tutulur, hiçbir sunucuya gönderilmez, başka cihazdan görülemez.
+3. **Konum izni gerekir.** `navigator.geolocation.getCurrentPosition` güvenli bağlam
+   (HTTPS/localhost) ve kullanıcı izni ister. İlk bağlanmada tarayıcı izin sorar;
+   bu izin ekranı kullanıcı onayı yerine geçer. İzin reddedilirse ses/çalma akışı
+   bozulmaz, kart gösterilmez (fire-and-forget, sessiz degrade).
+
+**Davranış:**
+- Kulaklık bağlandığında (`markConnected`), fire-and-forget biçimde konum alınır;
+  başarılıysa `{lat, lng, acc, t}` kaydedilir ve "Son görüldüğü yer" kartı açılır.
+- Kart: başlık "Son görüldüğü yer", gömülü harita, altında "az önce / N dk önce"
+  türü göreli zaman + "±N m" doğruluk, ve cihazın kendi harita uygulamasında açan
+  "Haritada aç" linki (OpenStreetMap, zoom 17).
+- Harita **Leaflet 1.9.4** ile çizilir; dosyalar `web/vendor/leaflet/`'e gömülüdür
+  (dış bağımlılık/CDN yok, service worker önbelleğe alır). Karolar OpenStreetMap'ten
+  gelir (API anahtarı gerekmez). Çevrimdışıyken kütüphane önbellekten yüklenir, yalnız
+  karolar gelmez; koordinat ve "Haritada aç" linki yine çalışır.
+- Leaflet hiç yüklenemezse harita yerine koordinat metni gösterilir (graceful fallback).
+
 ### Görsel kimlik
 - **İkon:** Sarı (`#ffd23f`) yuvarlatılmış kare zemin. Üzerinde siyah (`#111`) bir kulak içi kulaklık ve sağında iki ses dalgası (dıştaki %50 saydam). Düz renkler, gradyan yok.
 - **Palet** (CSS değişkenleri, koyu ve açık tema `prefers-color-scheme` ile):
@@ -101,3 +130,4 @@ Bağlantı onaylanınca: cihaz göstergesi güncellenir, panel kapanır ve büy�
 - Telefon ve masaüstü, açık ve koyu temada konsolda hata yok.
 - Chrome'un yüklenebilirlik kontrolü hata vermez. Sayfa internet yokken de açılır.
 - Hiçbir metin uygulamanın Bluetooth ile kendisi bağlandığını, sistem sesini yükselttiğini ya da kutusundaki kulaklığı bulabildiğini iddia etmez.
+- Kulaklık bağlanınca konum izni verilirse "Son görüldüğü yer" kartı haritayla açılır; izin reddedilirse akış bozulmadan sessizce devam eder. Hiçbir metin konumun arka planda ya da sunucuya gönderilerek takip edildiğini iddia etmez.
