@@ -1,16 +1,17 @@
 // Bleep PWA uçtan uca testleri: cihaz bağlama akışı ve cihaza göre gruplanan
 // "Son görüldüğü yer" konum geçmişi. Gerçek tarayıcıda koşar; yalnız lint'in
-// göremeyeceği hataları (ör. `defer`'li Leaflet'in yükleme sırası) yakalamak için var.
+// göremeyeceği hataları (ör. tembel yüklenen MapLibre'nin kurulumu) yakalamak için var.
 const { test, expect } = require("@playwright/test");
 
 const IST = { latitude: 41.0082, longitude: 28.9784, accuracy: 14 };
 
-// OSM karolarını kes: testler dış ağa bağımlı olmasın, CI'da aralıklı kırmızı çıkmasın.
+// Dış harita kaynaklarını (OpenFreeMap vektör karo/glyph/sprite, AWS yükseklik karoları)
+// kes: testler dış ağa bağımlı olmasın, CI'da aralıklı kırmızı çıkmasın.
 // Sayfa hatalarını da topla: her test sonunda "JS hatası yok" doğrulanır.
 // Bir worker içindeki testler sırayla koştuğu için modül düzeyinde tek dizi yeterli.
 let pageErrors = [];
 test.beforeEach(async ({ context, page }) => {
-  await context.route(/tile\.openstreetmap\.org/, (r) => r.abort());
+  await context.route(/tiles\.openfreemap\.org|elevation-tiles-prod/, (r) => r.abort());
   pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
   page.on("console", (m) => {
@@ -62,8 +63,8 @@ test.describe("konum izni varken", () => {
     await expect(page.locator("#app")).toHaveClass(/ready/);
     await expect(page.locator("#seenList li")).toHaveCount(1);
     await expect(page.locator("#seenDevice option")).toHaveCount(1);
-    // Leaflet `defer` ile yüklenir; marker çıkıyorsa yükleme sırası doğrudur.
-    await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(1);
+    // MapLibre tembel yüklenir; işaret çıkıyorsa kütüphane, stil ve WebGL kurulumu çalışıyordur.
+    await expect(page.locator("#map .maplibregl-marker")).toHaveCount(1);
     const h = await history(page);
     expect(Object.values(h.devices).map((d) => d.name)).toEqual([label]);
   });
@@ -84,7 +85,7 @@ test.describe("konum izni varken", () => {
 
       await manualConnect(page, "btn:AirPods Pro");                 // önceki ad düğmesiyle
       await expect(page.locator("#seenList li")).toHaveCount(2);
-      await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(2);
+      await expect(page.locator("#map .maplibregl-marker")).toHaveCount(2);
       // Zaman damgası: "gg.aa.yyyy ss:dd · ±N m"
       await expect(page.locator("#seenList li button span").first()).toHaveText(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2} · ±\d+ m$/);
       await expect(page.locator("#seenWhen")).toHaveText(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}/);
@@ -108,7 +109,7 @@ test.describe("konum izni varken", () => {
       // Yeniden açılış: son seçilen cihaz ve haritası geri gelir.
       await page.reload();
       await expect(page.locator("#seenDevice")).toHaveValue("airpods pro");
-      await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(2);
+      await expect(page.locator("#map .maplibregl-marker")).toHaveCount(2);
     });
 
     test("cihaz başına en fazla 50 kayıt tutulur", async ({ page }) => {
@@ -123,6 +124,31 @@ test.describe("konum izni varken", () => {
       // 50 satır sayfayı uzatmasın: liste kendi içinde kayar.
       expect(await page.locator("#seenList").evaluate((e) => e.clientHeight)).toBeLessThanOrEqual(200);
     });
+  });
+});
+
+test.describe("harita stili", () => {
+  // Kısıt: yalnız anahtarsız ücretsiz kaynaklar (OpenFreeMap + AWS Terrain Tiles).
+  test("style.json yalnız izinli kaynakları kullanır, anahtar içermez", async ({ request }) => {
+    const txt = await (await request.get("/map/style.json")).text();
+    expect(txt).not.toMatch(/tile\.openstreetmap\.org|mapbox|maptiler|google|[?&](key|access_token)=/i);
+    const style = JSON.parse(txt);
+    const urls = Object.values(style.sources).flatMap((s) => [s.url, ...(s.tiles || [])].filter(Boolean));
+    urls.push(style.glyphs, style.sprite);
+    for (const u of urls) {
+      expect(u).toMatch(/^https:\/\/(tiles\.openfreemap\.org|s3\.amazonaws\.com\/elevation-tiles-prod\/terrarium)\//);
+    }
+  });
+
+  test("renk token'ları çözülür, OSM atfı haritada görünür", async ({ page }) => {
+    await page.goto("/index.html");
+    await page.evaluate(() => localStorage.setItem("bleep.history", JSON.stringify({ v: 1, devices: {
+      a: { name: "A", records: [{ lat: 41, lng: 29, acc: 10, t: Date.now() }] } } })));
+    await page.reload();
+    await expect(page.locator("#map canvas.maplibregl-canvas")).toBeVisible();
+    // Karo/TileJSON istekleri kesik olsa da stildeki atıf görünür kalmalı (kompakt "i" değil).
+    await expect(page.locator("#map .maplibregl-ctrl-attrib")).toContainText("OpenStreetMap contributors");
+    await expect(page.locator("#map .maplibregl-ctrl-attrib.maplibregl-compact")).toHaveCount(0);
   });
 });
 
@@ -158,10 +184,12 @@ for (const colorScheme of ["dark", "light"]) {
     test("geçmiş doluyken yatay taşma yok", async ({ page }) => {
       await page.goto("/index.html");
       await page.evaluate(() => {
-        const mk = (n) => Array.from({ length: n }, (_, i) => ({ lat: 41 + i / 500, lng: 29, acc: 12, t: Date.now() - i * 5400e3 }));
+        // `age`: Beats açıkça daha eski olmalı; aynı Date.now() ile üretilirse milisaniye
+        // farkıyla "en son cihaz" Beats olabiliyor ve liste 4 yerine 2 satır gösteriyordu.
+        const mk = (n, age) => Array.from({ length: n }, (_, i) => ({ lat: 41 + i / 500, lng: 29, acc: 12, t: Date.now() - age - i * 5400e3 }));
         localStorage.setItem("bleep.history", JSON.stringify({ v: 1, devices: {
-          "airpods pro": { name: "AirPods Pro", records: mk(4) },
-          "beats studio": { name: "Beats Studio", records: mk(2) } } }));
+          "airpods pro": { name: "AirPods Pro", records: mk(4, 0) },
+          "beats studio": { name: "Beats Studio", records: mk(2, 86400e3) } } }));
       });
       await page.reload();
       await expect(page.locator("#seenList li")).toHaveCount(4);

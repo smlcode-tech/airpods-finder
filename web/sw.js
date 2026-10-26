@@ -1,16 +1,16 @@
 // Uygulama kabuğunu önbelleğe alır; internet yokken de açılır.
-const CACHE = "bleep-v9";
+const CACHE = "bleep-v10";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest",
   // İkon adresleri index.html ve manifest'teki ?v= sürümüyle birebir aynı olmalı; yoksa çevrimdışıyken önbellekten bulunamaz.
   "./favicon.svg?v=6", "./favicon.ico?v=6", "./apple-touch-icon.png?v=6",
   "./icon-192.png?v=6", "./icon-512.png?v=6", "./icon-maskable-512.png?v=6",
-  // Gömülü harita kütüphanesi (Leaflet): çevrimdışıyken de harita arayüzü yüklensin.
-  // ?v=7 index.html'deki <link>/<script> adresiyle birebir aynı olmalı.
-  "./vendor/leaflet/leaflet.css?v=7", "./vendor/leaflet/leaflet.js?v=7",
-  "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-icon-2x.png",
-  "./vendor/leaflet/images/marker-shadow.png",
-  "./vendor/leaflet/images/layers.png", "./vendor/leaflet/images/layers-2x.png",
+  // Gömülü harita kütüphanesi (MapLibre) ve yerel harita stili: çevrimdışıyken de harita
+  // arayüzü ve işaretler yüklensin (vektör karolar dış kaynaklı olduğundan önbelleğe girmez).
+  // MapLibre worker'ı "?v=<sürüm>" ekiyle ister; çevrimdışı eşleşmeyi aşağıdaki
+  // `ignoreSearch` sağlar.
+  "./vendor/maplibre/maplibre-gl.mjs", "./vendor/maplibre/maplibre-gl-worker.mjs",
+  "./vendor/maplibre/maplibre-gl.css", "./map/style.json",
 ];
 
 self.addEventListener("install", (e) => {
