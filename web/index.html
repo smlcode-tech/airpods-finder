@@ -14,11 +14,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bleep">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<!-- Harita kütüphanesi (Leaflet 1.9.4) web/vendor/'a gömülü: dış bağımlılık/CDN yok,
-     service worker önbelleğe aldığından çevrimdışı da yüklenir. defer: sayfa açılışını geciktirmesin.
-     Yüklenemezse koddaki `typeof L` koruması koordinat+link fallback'ine düşer. -->
-<link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=7">
-<script src="vendor/leaflet/leaflet.js?v=7" defer></script>
+<!-- Harita kütüphanesi (MapLibre GL JS) web/vendor/maplibre/'a gömülüdür ama burada
+     YÜKLENMEZ: ~1.6 MB olduğundan yalnızca gösterilecek konum kaydı varsa koddan tembel
+     yüklenir (bkz. loadMapLib). Böylece kaydı olmayan kullanıcının açılışı hızlı kalır. -->
 <style>
   :root {
     /* İkonla aynı palet: sarı #ffd23f + mürekkep siyahı #111 */
@@ -163,8 +161,19 @@
     color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
   }
   .nameLabel { display: block; margin-top: 12px; font-size: 14px; color: var(--muted); }
-  /* Leaflet bağlantı/zoom kontrolleri küçük ekranda sade dursun */
-  .leaflet-control-attribution { font-size: 10px; }
+  /* Harita atfı küçük kartta sığsın ama okunur kalsın (OSM atfı her zaman görünür olmalı) */
+  #map .maplibregl-ctrl-attrib { font-size: 10px; line-height: 1.3; }
+  /* Konum işareti: Apple Maps'teki gibi beyaz kenarlı nokta. Uygulamanın sarı vurgusu;
+     soluk olanlar geçmiş kayıtlar, tam opak olan seçili kayıt. */
+  /* Dış öğe (.pin) MapLibre'nindir: konumlandırma transform'unu ve opaklığı o yazar, bu
+     yüzden görünüm ve büyütme iç öğede (span) durur; dış öğeye transform verilmez. */
+  .pin { border: 0; background: none; padding: 6px; cursor: pointer; }
+  .pin span {
+    display: block; width: 16px; height: 16px; border-radius: 50%;
+    background: #ffd23f; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35);
+    transition: transform .15s;
+  }
+  .pin.sel span { transform: scale(1.25); }
 
   /* Geniş ekran: buton solda, kontroller sağda */
   @media (min-width: 820px) {
@@ -515,19 +524,115 @@
   const OLD_KEY = "bleep.lastSeen";       // eski tek kayıtlık biçim; açılışta geçmişe taşınır
   const LAST_DEV_KEY = "bleep.lastDevice";
   const MAX_PER_DEVICE = 50;              // depolama kotasını zorlamamak için cihaz başına üst sınır
-  let lmap = null, lmarkers = [], lgroup = null, seenIcon = null;   // Leaflet örnekleri; ilk gösterimde kurulur
+  const MAP_ZOOM = 16;                    // seçili kayda odaklanırken sokak düzeyi
   let curKey = null;                      // kartta gösterilen cihaz
+  let mlMap = null, mlMarkers = [];       // MapLibre örnekleri; ilk gösterimde kurulur
+  let mapFailed = false;                  // WebGL/kütüphane yoksa kalıcı olarak metin fallback'i
+  let renderGen = 0;                      // eşzamanlı render'larda yalnız en sonuncusu haritaya yazsın
 
-  // Gömülü marker görsellerine açık yol veren ikonu tembel üretir: Leaflet'in otomatik
-  // yol tahminine güvenmeyiz (vendor/ altında kırılgan). Tembel, çünkü leaflet.js `defer`
-  // ile bu satırdan SONRA yüklenir; L'yi ancak kullanım anında (render) hazır sayarız.
-  function makeIcon() {
-    return L.icon({
-      iconUrl: "vendor/leaflet/images/marker-icon.png",
-      iconRetinaUrl: "vendor/leaflet/images/marker-icon-2x.png",
-      shadowUrl: "vendor/leaflet/images/marker-shadow.png",
-      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  // ---- Harita stili: renk token'ları (TEK kaynak) ----
+  // map/style.json'daki "$ad" biçimli değerler yüklenirken bu tablodan doldurulur.
+  // Paleti değiştirmek için yalnız burası düzenlenir.
+  const PALETTE = {
+    land: "#f6f4ef",     // arka plan: kırık beyaz
+    water: "#9dcbf2",    // su: yumuşak ama doygun mavi
+    park: "#ddebd3",     // park/orman: soluk yeşil
+    road: "#ffffff",     // yol dolgusu
+    casing: "#d9d4ca",   // yol kenarı, bina, sınır çizgileri
+    ink: "#5e5a52",      // etiket metni, tepe gölgesi, bina gölgesi
+  };
+
+  // style.json'u getirir ve "$token" dizelerini PALETTE değerleriyle değiştirir.
+  // Stil JSON olduğu için değişken taşıyamaz; renkleri tek yerde tutmanın yolu bu.
+  async function loadStyle() {
+    const res = await fetch("map/style.json");
+    if (!res.ok) throw new Error("style.json " + res.status);
+    const fill = (v) => {
+      if (typeof v === "string" && v[0] === "$") {
+        if (!(v.slice(1) in PALETTE)) throw new Error("Bilinmeyen renk token'ı: " + v);
+        return PALETTE[v.slice(1)];
+      }
+      if (Array.isArray(v)) return v.map(fill);
+      if (v && typeof v === "object") {
+        const o = {};
+        for (const k in v) o[k] = k === "metadata" ? v[k] : fill(v[k]);   // doküman alanına dokunma
+        return o;
+      }
+      return v;
+    };
+    return fill(await res.json());
+  }
+
+  // MapLibre'yi ve stili ilk ihtiyaçta bir kez yükler (sonraki çağrılar aynı Promise'i alır).
+  // Başarısızsa önbelleğe alınmaz: ağ dönünce bir sonraki render yeniden dener.
+  let mapLibPromise = null;
+  function loadMapLib() {
+    if (!mapLibPromise) {
+      mapLibPromise = (async () => {
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "vendor/maplibre/maplibre-gl.css";
+        document.head.appendChild(css);
+        // Dinamik import: klasik script içinden ES modülünü yükler. Worker dosyasını
+        // MapLibre kendi adresine göre (vendor/maplibre/maplibre-gl-worker.mjs) bulur.
+        const [mod, style] = await Promise.all([import("./vendor/maplibre/maplibre-gl.mjs"), loadStyle()]);
+        return { ml: mod.default || mod, style };
+      })();
+      mapLibPromise.catch(() => { mapLibPromise = null; });
+    }
+    return mapLibPromise;
+  }
+
+  // Haritayı ilk kez kurar. Karo/glyph indirme hataları (çevrimdışı, engelli ağ) beklenen
+  // durumdur ve sessiz geçilir; stil hatası gibi diğer hatalar konsola yazılır.
+  function createMap(ml, style, center) {
+    const map = new ml.Map({
+      container: "map", style, center, zoom: MAP_ZOOM,
+      // compact:false: kompakt mod atfı "i" ikonuna gizler; OSM atfı görünür kalmalı.
+      // OSM atfı customAttribution'da: kaynak atfı yalnız TileJSON yüklenince gösterilir,
+      // çevrimdışıyken de lisans gereği görünür kalsın diye buraya sabitlendi.
+      attributionControl: {
+        compact: false,
+        customAttribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>',
+      },
+      dragRotate: false, pitchWithRotate: false, touchPitch: false,   // istenen düz 2D görünüm
     });
+    map.touchZoomRotate.disableRotation();
+    map.on("error", (e) => {
+      const err = e && e.error;
+      const isNetwork = err && (err.name === "AJAXError" || /fetch|network|load/i.test(err.message || ""));
+      if (!isNetwork) console.error(err || e);
+    });
+    return map;
+  }
+
+  // Seçili cihazın kayıtlarını haritaya marker olarak koyar. Kütüphane tembel yüklendiği
+  // için asenkron; bu arada başka bir cihaza geçildiyse (renderGen değişti) sonucu atar.
+  async function showOnMap(recs, idx) {
+    const gen = ++renderGen;
+    if (mapFailed) { selectRecord(recs, idx); return; }
+    let lib;
+    try { lib = await loadMapLib(); } catch (e) { mapFailed = true; selectRecord(recs, idx); return; }
+    if (gen !== renderGen) return;
+    const r = recs[idx];
+    if (!mlMap) {
+      try { mlMap = createMap(lib.ml, lib.style, [r.lng, r.lat]); }
+      catch (e) { mapFailed = true; selectRecord(recs, idx); return; }   // WebGL yok
+    }
+    mlMarkers.forEach((m) => m.remove());
+    mlMarkers = recs.map((rec, i) => {
+      const el = document.createElement("button");
+      el.className = "pin";
+      el.appendChild(document.createElement("span"));
+      el.setAttribute("aria-label", fmtTime(rec.t));
+      el.onclick = (ev) => { ev.stopPropagation(); selectRecord(recs, i); };
+      return new lib.ml.Marker({ element: el }).setLngLat([rec.lng, rec.lat]);
+    });
+    // Ters sırada ekle: en yeni kayıt en son eklenir, üst üste binince üstte kalır.
+    for (let i = mlMarkers.length - 1; i >= 0; i--) mlMarkers[i].addTo(mlMap);
+    // Kart `hidden`'dan yeni çıktıysa kapsayıcı boyutu sonradan oturur; tuvali yeniden ölçtür.
+    mlMap.resize();
+    selectRecord(recs, idx);
   }
 
   // Aynı kulaklığın "AirPods Pro" / "airpods pro " gibi yazımları tek grupta toplansın.
@@ -649,27 +754,12 @@
       seenList.appendChild(li);
     });
 
-    if (typeof L !== "undefined") {
-      if (!lmap) {
-        lmap = L.map("map", { attributionControl: true });
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19, attribution: "© OpenStreetMap",
-        }).addTo(lmap);
-        lgroup = L.layerGroup().addTo(lmap);
-      }
-      if (!seenIcon) seenIcon = makeIcon();   // L hazırken üret
-      lgroup.clearLayers();
-      // Ters sırada ekle: en yeni kayıt en son eklenir, üst üste binince üstte kalır.
-      lmarkers = recs.map((r) => L.marker([r.lat, r.lng], { icon: seenIcon }));
-      for (let i = lmarkers.length - 1; i >= 0; i--) {
-        lmarkers[i].on("click", () => selectRecord(recs, i)).addTo(lgroup);
-      }
-      // Kart `hidden`'dan görünüre geçince konteyner boyutu 0'dan gelebilir; Leaflet'in
-      // karoları doğru yerleştirmesi için boyutu yeniden hesaplat.
-      setTimeout(() => lmap.invalidateSize(), 0);
-    }
+    // Liste ve meta hemen güncellenir; harita kütüphane yüklenince (asenkron) gelir.
+    mlMarkers.forEach((m) => m.remove());
+    mlMarkers = [];
     selectRecord(recs, 0);
     seenList.scrollTop = 0;
+    showOnMap(recs, 0);
   }
 
   // Tek kaydı öne çıkarır: liste satırı vurgulanır, harita oraya gider, diğer
@@ -681,18 +771,22 @@
                     "#map=17/" + r.lat + "/" + r.lng;
     seenWhen.textContent = fmtTime(r.t) + (r.acc ? " · ±" + Math.round(r.acc) + " m" : "");
 
-    // Leaflet yüklenemediyse (gömülü dosya eksik): harita yerine koordinat metni; link yine çalışır.
-    if (typeof L === "undefined") {
+    // MapLibre yüklenemediyse ya da WebGL yoksa: harita yerine koordinat metni; link yine çalışır.
+    if (mapFailed) {
       const m = $("map");
       m.style.display = "grid"; m.style.placeItems = "center"; m.style.color = "var(--muted)";
       m.textContent = r.lat.toFixed(5) + ", " + r.lng.toFixed(5);
       return;
     }
-    lmarkers.forEach((mk, j) => {
-      mk.setOpacity(j === i ? 1 : 0.4);
-      mk.setZIndexOffset(j === i ? 1000 : 0);   // seçili kayıt diğerlerinin altında kalmasın
+    if (!mlMap || !mlMarkers.length) return;   // harita henüz yükleniyor; showOnMap sonunda tekrar çağırır
+    mlMarkers.forEach((mk, j) => {
+      const el = mk.getElement();
+      el.classList.toggle("sel", j === i);
+      // Opaklık CSS ile değil API ile: MapLibre öğenin inline opacity'sini kendisi yönetir.
+      mk.setOpacity(j === i ? "1" : "0.45");
+      el.style.zIndex = j === i ? "1" : "";    // seçili kayıt diğerlerinin altında kalmasın
     });
-    lmap.setView([r.lat, r.lng], 17);
+    mlMap.jumpTo({ center: [r.lng, r.lat], zoom: MAP_ZOOM });
   }
 
   seenDevice.onchange = () => { setLastDev(seenDevice.value); renderSeen(seenDevice.value); };
@@ -704,11 +798,9 @@
     renderSeen(last);
   }
 
-  // loadSeen'i DOMContentLoaded'a ertele: `defer`'li leaflet.js bu inline scriptten
-  // sonra ama DOMContentLoaded'dan önce çalışır; böylece kayıtlı konum ilk açılışta
-  // metin fallback'ine değil gerçek haritaya düşer. (Leaflet hiç yüklenmezse yine fallback.)
-  if (document.readyState === "loading") addEventListener("DOMContentLoaded", loadSeen);
-  else loadSeen();
+  // Script body'nin sonunda olduğundan kartın DOM'u hazır; harita kütüphanesi zaten
+  // renderSeen içinden tembel yüklendiği için beklenecek bir şey yok.
+  loadSeen();
 
   // ---- Web App ----
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {

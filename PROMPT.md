@@ -114,11 +114,31 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
   - Zaman damgalı liste (en yeni önde): her satırda tarih-saat + doğruluk ve sağda
     göreli süre ("az önce / N dk önce / N sa önce / N gün önce"). Satıra dokunmak
     haritayı o kayda götürür. Liste en fazla 200px yüksekliğinde, kendi içinde kayar.
-- Harita **Leaflet 1.9.4** ile çizilir; dosyalar `web/vendor/leaflet/`'e gömülüdür
-  (dış bağımlılık/CDN yok, service worker önbelleğe alır). Karolar OpenStreetMap'ten
-  gelir (API anahtarı gerekmez). Çevrimdışıyken kütüphane önbellekten yüklenir, yalnız
-  karolar gelmez; koordinat ve "Haritada aç" linki yine çalışır.
-- Leaflet hiç yüklenemezse harita yerine koordinat metni gösterilir (graceful fallback).
+- Harita **MapLibre GL JS 6.16.0** ile çizilir, düz 2D görünümde (döndürme ve eğim
+  kapalı). Dosyalar `web/vendor/maplibre/`'a gömülüdür (`maplibre-gl.mjs`, worker,
+  CSS). Kütüphane ~1.6 MB olduğu için yalnız gösterilecek kayıt varsa dinamik `import()`
+  ile tembel yüklenir. Service worker önbelleğe alır.
+- **Yalnız ücretsiz ve anahtarsız kaynaklar:** OpenFreeMap vektör karoları, glyph ve
+  sprite (`tiles.openfreemap.org`), AWS Terrain Tiles terrarium yükseklik karoları
+  (`s3.amazonaws.com/elevation-tiles-prod/terrarium`). tile.openstreetmap.org, Google,
+  Mapbox, MapTiler ve anahtar isteyen hiçbir servis kullanılmaz.
+- Stil `web/map/style.json`: OpenFreeMap positron'dan (MIT) çatallanmış, Apple Maps'i
+  andıran sade 2D görünüm. Renkler `"$land"` gibi token'lardır; yükleyici bunları
+  `index.html`'deki tek `PALETTE` tablosundan doldurur (6 renk: land kırık beyaz, water
+  mavi, park soluk yeşil, road beyaz, casing gri kenar, ink etiket/gölge).
+  - Hillshade: terrarium raster-dem, zemin ve parkların üstünde, suyun altında; düşük
+    exaggeration ile hafif.
+  - Bina derinliği: kaydırılmış (`fill-translate`, zoom'la 1→3 px) koyu gölge, üstünde
+    opak zemin maskesi ve yarı saydam bina tonu.
+  - Yollar: gri kenar + beyaz iç çizgi; kalınlıklar üstel 1.5 interpolate, renkler düşük
+    zoom'da griden beyaza interpolate.
+  - Etiketler: yerel ad önde, yumuşak halo, azaltılmış yoğunluk; mahalle/semt büyük
+    harf ve açık harf aralığıyla. fill-pattern kullanılmaz (küçük kartta okunabilirlik).
+- Atıf her zaman görünür (kompakt değil); "© OpenStreetMap contributors" stil
+  kaynağına değil `customAttribution`'a yazılıdır, çevrimdışıyken de görünür kalır.
+- Çevrimdışıyken kütüphane ve stil önbellekten yüklenir, yalnız karolar gelmez; işaretler,
+  koordinat ve "Haritada aç" linki çalışır. Karo/ağ hataları konsola yazılmaz.
+- MapLibre yüklenemezse ya da WebGL yoksa harita yerine koordinat metni gösterilir.
 
 ### Görsel kimlik
 - **İkon:** Sarı (`#ffd23f`) yuvarlatılmış kare zemin. Üzerinde siyah (`#111`) bir kulak içi kulaklık ve sağında iki ses dalgası (dıştaki %50 saydam). Düz renkler, gradyan yok.
@@ -144,3 +164,5 @@ yerdedir, dolayısıyla telefonun konumu = kulaklığın konumu.
 - Chrome'un yüklenebilirlik kontrolü hata vermez. Sayfa internet yokken de açılır.
 - Hiçbir metin uygulamanın Bluetooth ile kendisi bağlandığını, sistem sesini yükselttiğini ya da kutusundaki kulaklığı bulabildiğini iddia etmez.
 - "Son görüldüğü yer" kartı ilk açılışta boş durum metniyle görünür. Kulaklık bağlanınca konum izni verilirse kayıt o cihazın geçmişine eklenir ve kartta harita açılır; seçiciden başka bir cihaz seçilince harita ve zaman damgalı liste o cihazın geçmişine geçer. İzin reddedilirse akış bozulmadan devam eder ve kart boş durumda kalır. Hiçbir metin konumun arka planda ya da sunucuya gönderilerek takip edildiğini iddia etmez.
+- Harita zoom 5, 12 ve 16'da okunaklı ve dengeli; kaydırma ve zoom akıcı. style.json'da
+  API anahtarı ya da izinsiz kaynak yok; OSM atfı haritada görünür.
